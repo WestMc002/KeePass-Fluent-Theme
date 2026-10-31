@@ -58,6 +58,8 @@ Funktionen
 - Ein angezeigtes Passwort wird nach einstellbarer Zeit wieder
   verborgen (Standard: 15 Sekunden)
 - Höhe der Detailansicht passt sich automatisch an den Eintrag an
+- Breite der drei Karten in der Detailansicht mit der Maus verstellbar
+  (Lücke zwischen den Karten ziehen, Doppelklick = wieder gleich breit)
 - Info-Fenster: Klick auf "Fluent Theme x.y" unten rechts in der Statusleiste
   (oder Extras > Fluent-Design > Info über Fluent Theme)
 

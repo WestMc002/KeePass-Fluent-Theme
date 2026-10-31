@@ -30,6 +30,7 @@ namespace FluentTheme
 		private const string CfgIcons = "FluentTheme.ModernIcons";
 		private const string CfgAutoHeight = "FluentTheme.DetailsAutoHeight";
 		private const string CfgReveal = "FluentTheme.RevealSeconds";
+		private const string CfgColumns = "FluentTheme.DetailsColumns";
 		private const string CfgExpiryDays = "FluentTheme.ExpiryWarnDays";
 		private const string CfgShowVersion = "FluentTheme.ShowVersion";
 
@@ -135,6 +136,11 @@ namespace FluentTheme
 					m_details.BringToFront();
 					m_details.ContentHeightChanged += delegate { FitDetails(); };
 					m_details.TagClicked += OnTagClicked;
+					m_details.ColumnRatios = m_host.CustomConfig.GetString(CfgColumns, string.Empty);
+					m_details.ColumnsChanged += delegate
+					{
+						m_host.CustomConfig.SetString(CfgColumns, m_details.ColumnRatios);
+					};
 					m_detailsSplit = FindDetailsSplit();
 					if(m_detailsSplit != null) m_detailsSplit.SizeChanged += OnDetailsSplitSizeChanged;
 				}

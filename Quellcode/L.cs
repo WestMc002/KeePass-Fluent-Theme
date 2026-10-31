@@ -174,6 +174,7 @@ namespace FluentTheme
 			{ "Anhänge", "Attachments" },
 			{ "Speichern unter …", "Save as …" },
 			{ "Öffnen: {0}", "Open: {0}" },
+			{ "Ziehen: Breite ändern · Doppelklick: gleich breit", "Drag: change width · Double-click: equal widths" },
 
 			// Anhang speichern
 			{ "Anhang speichern", "Save attachment" },

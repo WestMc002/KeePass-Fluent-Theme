@@ -115,6 +115,52 @@ namespace FluentTheme
 			}
 		}
 
+		// Breiten der drei Karten (Anteile), per Maus zwischen den Karten verstellbar
+		private readonly float[] m_colRatio = new float[] { 1f / 3f, 1f / 3f, 1f / 3f };
+		private readonly Rectangle[] m_splitters = new Rectangle[2];
+		private int m_splitHot = -1;
+		private int m_splitDrag = -1;
+		private int m_splitAvail;   // Breite aller Karten ohne Lücken beim Ziehen
+		private int m_splitLeft;    // linker Rand der ersten Karte beim Ziehen
+
+		/// <summary>Kartenbreiten wurden mit der Maus geändert (zum Speichern).</summary>
+		public event EventHandler ColumnsChanged;
+
+		/// <summary>Anteile der drei Karten als Text „a;b;c“ (invariant), z. B. zum Speichern.</summary>
+		public string ColumnRatios
+		{
+			get
+			{
+				return string.Join(";", new string[] {
+					m_colRatio[0].ToString("0.####", CultureInfo.InvariantCulture),
+					m_colRatio[1].ToString("0.####", CultureInfo.InvariantCulture),
+					m_colRatio[2].ToString("0.####", CultureInfo.InvariantCulture) });
+			}
+			set
+			{
+				float[] r = new float[] { 1f / 3f, 1f / 3f, 1f / 3f };
+				try
+				{
+					string[] parts = (value ?? string.Empty).Split(';');
+					if(parts.Length == 3)
+					{
+						float a, b, c;
+						if(float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out a) &&
+							float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out b) &&
+							float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out c) &&
+							(a > 0.05f) && (b > 0.05f) && (c > 0.05f))
+						{
+							float sum = a + b + c;
+							r = new float[] { a / sum, b / sum, c / sum };
+						}
+					}
+				}
+				catch(Exception) { }
+				for(int i = 0; i < 3; ++i) m_colRatio[i] = r[i];
+				Invalidate();
+			}
+		}
+
 		/// <summary>Benötigte Höhe des Inhalts hat sich geändert (für die automatische Höhe).</summary>
 		public event EventHandler ContentHeightChanged;
 
@@ -495,18 +541,53 @@ namespace FluentTheme
 			int minW = D(300);
 			int cols = Math.Max(1, Math.Min(3, (w + gap) / (minW + gap)));
 			int cardW = (w - (cols - 1) * gap) / cols;
+			m_splitters[0] = Rectangle.Empty;
+			m_splitters[1] = Rectangle.Empty;
 
-			int[] hs = new int[3];
-			for(int i = 0; i < 3; ++i) hs[i] = DrawCard(g, i, new Rectangle(0, 0, cardW, 0), false);
-
-			for(int i = 0; i < 3; i += cols)
+			if(cols == 3)
 			{
-				int last = Math.Min(3, i + cols);
-				int rowH = 0;
-				for(int k = i; k < last; ++k) rowH = Math.Max(rowH, hs[k]);
-				for(int k = i; k < last; ++k)
-					DrawCard(g, k, new Rectangle(x0 + (k - i) * (cardW + gap), y, cardW, rowH), true);
+				// Eine Reihe: Breiten nach den gespeicherten Anteilen, dazwischen ziehbare Lücken
+				int avail = w - 2 * gap;
+				int[] cw = ColumnWidths(avail);
+				int[] hs = new int[3];
+				for(int i = 0; i < 3; ++i) hs[i] = DrawCard(g, i, new Rectangle(0, 0, cw[i], 0), false);
+				int rowH = Math.Max(hs[0], Math.Max(hs[1], hs[2]));
+				int x = x0;
+				for(int k = 0; k < 3; ++k)
+				{
+					DrawCard(g, k, new Rectangle(x, y, cw[k], rowH), true);
+					x += cw[k];
+					if(k < 2)
+					{
+						m_splitters[k] = new Rectangle(x, y, gap, rowH);
+						if((m_splitHot == k) || (m_splitDrag == k))
+						{
+							// Griff als Hinweis: schmaler, abgerundeter Balken mitten in der Lücke
+							int gh = Math.Min(D(40), rowH - D(16));
+							Color gc = ((m_splitDrag == k) ? m_p.Pill : Palette.Blend(m_p.Sub, m_p.Bg, 0.35));
+							Gfx.Fill(g, new Rectangle(x + gap / 2 - D(2), y + (rowH - gh) / 2, D(4), gh), D(2), gc);
+						}
+						x += gap;
+					}
+				}
+				m_splitAvail = avail;
+				m_splitLeft = x0;
 				y += rowH + gap;
+			}
+			else
+			{
+				int[] hs = new int[3];
+				for(int i = 0; i < 3; ++i) hs[i] = DrawCard(g, i, new Rectangle(0, 0, cardW, 0), false);
+
+				for(int i = 0; i < 3; i += cols)
+				{
+					int last = Math.Min(3, i + cols);
+					int rowH = 0;
+					for(int k = i; k < last; ++k) rowH = Math.Max(rowH, hs[k]);
+					for(int k = i; k < last; ++k)
+						DrawCard(g, k, new Rectangle(x0 + (k - i) * (cardW + gap), y, cardW, rowH), true);
+					y += rowH + gap;
+				}
 			}
 
 			SetContentHeight(y - this.AutoScrollPosition.Y - gap + D(8));
@@ -528,6 +609,96 @@ namespace FluentTheme
 			if(pg == null) return string.Empty;
 			try { return pg.GetFullPath(" › ", true); }
 			catch(Exception) { return pg.Name; }
+		}
+
+		private int MinCardWidth
+		{
+			get { return D(220); }
+		}
+
+		/// <summary>Breiten der drei Karten aus den Anteilen, jede mindestens MinCardWidth.</summary>
+		private int[] ColumnWidths(int avail)
+		{
+			int min = Math.Min(MinCardWidth, avail / 3);
+			int w0 = Math.Max(min, (int)Math.Round(avail * m_colRatio[0]));
+			int w1 = Math.Max(min, (int)Math.Round(avail * m_colRatio[1]));
+			if(w0 + w1 > avail - min)
+			{
+				int over = w0 + w1 - (avail - min);
+				int take0 = Math.Min(over, Math.Max(0, w0 - min));
+				w0 -= take0;
+				w1 = Math.Max(min, w1 - (over - take0));
+			}
+			return new int[] { w0, w1, Math.Max(0, avail - w0 - w1) };
+		}
+
+		private int SplitterAt(Point pt)
+		{
+			for(int i = 0; i < 2; ++i)
+			{
+				Rectangle r = m_splitters[i];
+				if(!r.IsEmpty && Rectangle.Inflate(r, D(2), 0).Contains(pt)) return i;
+			}
+			return -1;
+		}
+
+		protected override void OnMouseDown(MouseEventArgs e)
+		{
+			base.OnMouseDown(e);
+			if(e.Button != MouseButtons.Left) return;
+			int s = SplitterAt(e.Location);
+			if(s < 0) return;
+			m_splitDrag = s;
+			this.Capture = true;
+			Invalidate();
+		}
+
+		protected override void OnMouseUp(MouseEventArgs e)
+		{
+			base.OnMouseUp(e);
+			if(m_splitDrag < 0) return;
+			m_splitDrag = -1;
+			this.Capture = false;
+			Invalidate();
+			EventHandler h = ColumnsChanged;
+			if(h != null) h(this, EventArgs.Empty);
+		}
+
+		protected override void OnMouseDoubleClick(MouseEventArgs e)
+		{
+			base.OnMouseDoubleClick(e);
+			if((e.Button != MouseButtons.Left) || (SplitterAt(e.Location) < 0)) return;
+			// Doppelklick auf die Lücke: alle Karten wieder gleich breit
+			for(int i = 0; i < 3; ++i) m_colRatio[i] = 1f / 3f;
+			Invalidate();
+			EventHandler h = ColumnsChanged;
+			if(h != null) h(this, EventArgs.Empty);
+		}
+
+		/// <summary>Beim Ziehen: Grenze zwischen Karte k und k+1 auf die Mausposition setzen.</summary>
+		private void DragSplitter(int x)
+		{
+			int avail = m_splitAvail;
+			if(avail <= 0) return;
+			int gap = D(12);
+			int min = Math.Min(MinCardWidth, avail / 3);
+			int[] cw = ColumnWidths(avail);
+			int pos = x - m_splitLeft - gap / 2; // Mausposition relativ zur ersten Karte
+			if(m_splitDrag == 0)
+			{
+				int w0 = Math.Max(min, Math.Min(pos, cw[0] + cw[1] - min));
+				cw[1] = cw[0] + cw[1] - w0;
+				cw[0] = w0;
+			}
+			else
+			{
+				int left = cw[0] + gap;
+				int w1 = Math.Max(min, Math.Min(pos - left, cw[1] + cw[2] - min));
+				cw[2] = cw[1] + cw[2] - w1;
+				cw[1] = w1;
+			}
+			for(int i = 0; i < 3; ++i) m_colRatio[i] = (float)cw[i] / avail;
+			Invalidate();
 		}
 
 		private int DrawCard(Graphics g, int index, Rectangle r, bool draw)
@@ -1055,6 +1226,28 @@ namespace FluentTheme
 		protected override void OnMouseMove(MouseEventArgs e)
 		{
 			base.OnMouseMove(e);
+			if(m_splitDrag >= 0)
+			{
+				DragSplitter(e.X);
+				this.Cursor = Cursors.VSplit;
+				return;
+			}
+			int sp = SplitterAt(e.Location);
+			if(sp != m_splitHot)
+			{
+				m_splitHot = sp;
+				Invalidate();
+			}
+			if(sp >= 0)
+			{
+				this.Cursor = Cursors.VSplit;
+				if(m_tipText != L.T("Ziehen: Breite ändern · Doppelklick: gleich breit"))
+				{
+					m_tipText = L.T("Ziehen: Breite ändern · Doppelklick: gleich breit");
+					m_tip.SetToolTip(this, m_tipText);
+				}
+				return;
+			}
 			Hit h = HitAt(e.Location);
 			bool clickable = ((h != null) && (h.Click != null));
 			Rectangle hot = (clickable ? h.Rect : Rectangle.Empty);
@@ -1078,6 +1271,11 @@ namespace FluentTheme
 		protected override void OnMouseLeave(EventArgs e)
 		{
 			base.OnMouseLeave(e);
+			if((m_splitHot >= 0) && (m_splitDrag < 0))
+			{
+				m_splitHot = -1;
+				Invalidate();
+			}
 			if(!m_hotRect.IsEmpty)
 			{
 				Rectangle old = m_hotRect;

@@ -58,6 +58,8 @@ Features
 - A revealed password is hidden again after an adjustable time
   (default: 15 seconds)
 - The height of the entry details adapts to the entry automatically
+- The width of the three detail cards can be changed with the mouse
+  (drag the gap between the cards, double-click = equal widths again)
 - About window: click "Fluent Theme x.y" at the bottom right of the
   status bar (or Tools > Fluent Design > About Fluent Theme)
 

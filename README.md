@@ -40,6 +40,7 @@ The plugin speaks **English and German** and follows the language of KeePass.
 - **“Copied” hint** with the time after which KeePass clears the clipboard
 - A revealed password is **hidden again automatically** after an adjustable time
 - The height of the entry details **adapts automatically** to the entry
+- **Adjustable card widths:** drag the gap between the cards; double-click resets to equal widths
 - **Restyled KeePass dialogs:** header, tabs, content on a card, consistent input fields with accent line, quality bar in traffic-light colors, buttons – for all KeePass dialogs (entry, group, options, password generator …)
 
 All settings: **Tools › Fluent Design**.
@@ -90,6 +91,7 @@ Das Plugin spricht **Deutsch und Englisch** und folgt der Sprache von KeePass.
 - **„Kopiert“-Hinweis** mit der Zeit, nach der KeePass die Zwischenablage leert
 - Angezeigtes Passwort wird nach einstellbarer Zeit **automatisch wieder verborgen**
 - Höhe der Detailansicht passt sich **automatisch** an den Eintrag an
+- **Kartenbreiten verstellbar:** Lücke zwischen den Karten mit der Maus ziehen; Doppelklick macht sie wieder gleich breit
 - **Gestaltete KeePass-Dialoge:** Kopfbereich, Registerkarten, Inhalt auf einer Karte, einheitliche Eingabefelder mit Akzentlinie, Qualitätsbalken in Ampelfarben, Knöpfe – gilt für alle KeePass-Dialoge (Eintrag, Gruppe, Optionen, Passwort-Generator …)
 
 Alle Einstellungen: **Extras › Fluent-Design**.
