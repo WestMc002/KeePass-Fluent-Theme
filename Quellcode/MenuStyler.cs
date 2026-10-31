@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace FluentTheme
@@ -24,7 +25,12 @@ namespace FluentTheme
 		// „Weitere Befehle“ im Kontextmenü öffnet das Menü „Eintrag“ der Menüleiste – KeePass zeigt es
 		// dann unter der Menüleiste an. Wir merken uns, wo im Kontextmenü geklickt wurde.
 		private Point m_ctxClickPt = Point.Empty;
+
+		/// <summary>Hinweis zu „Weitere Befehle“, falls das Menü nachträglich versetzt werden musste
+		/// (erscheint im Fehlerbericht).</summary>
+		internal static string MoveInfo = string.Empty;
 		private DateTime m_ctxClickTime = DateTime.MinValue;
+		private Rectangle m_ctxBounds = Rectangle.Empty; // Bildschirmbereich des angeklickten Kontextmenüs
 
 		private int D(int v)
 		{
@@ -246,25 +252,67 @@ namespace FluentTheme
 			if(top.OwnerItem != null) return;
 			m_ctxClickPt = Cursor.Position;
 			m_ctxClickTime = DateTime.Now;
+			m_ctxBounds = (dd.IsHandleCreated ? dd.Bounds : Rectangle.Empty);
+
 		}
 
 		/// <summary>Öffnet sich ein Menü der Menüleiste direkt nach einem Klick im Kontextmenü
 		/// (z. B. „Weitere Befehle“), erscheint es an der Klickstelle statt unter der Menüleiste.</summary>
 		private void MoveToContextClick(ToolStripDropDown dd)
 		{
-			if(m_ctxClickPt.IsEmpty || ((DateTime.Now - m_ctxClickTime).TotalMilliseconds > 800)) return;
+			if(m_ctxClickPt.IsEmpty) return;
+			double ms = (DateTime.Now - m_ctxClickTime).TotalMilliseconds;
 			ToolStripItem owner = dd.OwnerItem;
+			string name = ((owner != null) ? owner.Name : "(kein Besitzer)");
+			if(ms > 2000)
+			{
+				m_ctxClickPt = Point.Empty; // abgelaufen – normale Menüs nicht mehr anfassen
+				return;
+			}
 			if((owner == null) || !(owner.Owner is MenuStrip)) return;
 			// Hat der Nutzer die Menüleiste selbst angeklickt, nichts verschieben
 			ToolStrip bar = owner.Owner;
 			if(bar.IsHandleCreated && bar.RectangleToScreen(bar.ClientRectangle).Contains(Cursor.Position)) return;
 
+			// Klickstelle nicht verbrauchen: KeePass/WinForms öffnen das Menü teils zweimal kurz
+			// hintereinander – jede Öffnung innerhalb von 2 s kommt an die Klickstelle
 			Point pt = m_ctxClickPt;
-			m_ctxClickPt = Point.Empty;
 			Rectangle wa = Screen.FromPoint(pt).WorkingArea;
-			int x = Math.Max(wa.Left, Math.Min(pt.X, wa.Right - dd.Width));
-			int y = Math.Max(wa.Top, Math.Min(pt.Y, wa.Bottom - dd.Height));
-			dd.Location = new Point(x, y);
+			// Das Menü ersetzt das Kontextmenü an derselben Stelle: gleiche linke Kante, gleiche
+			// Oberkante. Reicht der Platz nach unten nicht, schließt es unten bündig mit dem
+			// Kontextmenü ab. Ohne bekannte Lage gilt die Klickstelle.
+			int w = dd.Width, h = dd.Height;
+			Rectangle c = (m_ctxBounds.IsEmpty ? new Rectangle(pt, Size.Empty) : m_ctxBounds);
+			int x = c.Left, y = c.Top;
+			if((x + w > wa.Right) && (c.Right - w >= wa.Left)) x = c.Right - w;
+			if((y + h > wa.Bottom) && (c.Bottom - h >= wa.Top)) y = c.Bottom - h;
+			x = Math.Max(wa.Left, Math.Min(x, wa.Right - w));
+			y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
+			Point target = new Point(x, y);
+			// WinForms setzt Menüs der Menüleiste nach dem Öffnen wieder unter die Leiste – die
+			// Position deshalb festhalten, bis das Menü geschlossen wird
+			PositionPin.Pin(dd, target);
+			dd.Location = target;
+			// dd.Location bewegt das Fenster hier nicht (WinForms hält die Position für schon gesetzt) –
+			// deshalb sofort direkt über Windows an die Klickstelle setzen
+			PositionPin.MoveTo(dd.Handle, target);
+			// Nachkontrolle: kurz danach echte Fensterposition prüfen und notfalls direkt setzen
+			try
+			{
+				ToolStripDropDown d = dd;
+				Timer t = new Timer();
+				t.Interval = 150;
+				t.Tick += delegate
+				{
+					t.Stop();
+					t.Dispose();
+					if(d.IsDisposed || !d.IsHandleCreated) return;
+					if(d.Visible && PositionPin.MoveTo(d.Handle, target))
+						MoveInfo = "Menü " + name + ": nach 150 ms nachgesetzt";
+				};
+				t.Start();
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 
 		/// <summary>Globale Vorgabe: Menüs ohne Symbole bekommen keine leere Symbolspalte
@@ -308,4 +356,87 @@ namespace FluentTheme
 			HookItem(it);
 		}
 	}
-}
+
+	/// <summary>Hält ein offenes Menü an einer festen Bildschirmposition: jede Verschiebung durch
+	/// Windows/WinForms (WM_WINDOWPOSCHANGING) wird auf diese Position umgelenkt, bis es schließt.</summary>
+	internal sealed class PositionPin : NativeWindow
+	{
+		private const int WM_WINDOWPOSCHANGING = 0x0046;
+		private const uint SWP_NOMOVE = 0x0002;
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct WINDOWPOS
+		{
+			public IntPtr hwnd;
+			public IntPtr hwndInsertAfter;
+			public int x, y, cx, cy;
+			public uint flags;
+		}
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct RECT
+		{
+			public int Left, Top, Right, Bottom;
+		}
+
+		[DllImport("user32.dll")]
+		private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+		[DllImport("user32.dll")]
+		private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy,
+			uint uFlags);
+
+		/// <summary>Fenster direkt an eine Position setzen, falls es woanders steht.</summary>
+		internal static bool MoveTo(IntPtr h, Point pt)
+		{
+			RECT r;
+			if((h == IntPtr.Zero) || !GetWindowRect(h, out r)) return false;
+			if((r.Left == pt.X) && (r.Top == pt.Y)) return false;
+			const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+			return SetWindowPos(h, IntPtr.Zero, pt.X, pt.Y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+
+		private readonly ToolStripDropDown m_dd;
+		private Point m_pt;
+
+		private PositionPin(ToolStripDropDown dd, Point pt)
+		{
+			m_dd = dd;
+			m_pt = pt;
+			AssignHandle(dd.Handle);
+			dd.Closed += OnClosed;
+		}
+
+		public static void Pin(ToolStripDropDown dd, Point pt)
+		{
+			if((dd == null) || !dd.IsHandleCreated) return;
+			try { new PositionPin(dd, pt); }
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		private void OnClosed(object sender, ToolStripDropDownClosedEventArgs e)
+		{
+			m_dd.Closed -= OnClosed;
+			if(this.Handle != IntPtr.Zero) ReleaseHandle();
+		}
+
+		protected override void WndProc(ref Message m)
+		{
+			if((m.Msg == WM_WINDOWPOSCHANGING) && (m.LParam != IntPtr.Zero))
+			{
+				try
+				{
+					WINDOWPOS wp = (WINDOWPOS)Marshal.PtrToStructure(m.LParam, typeof(WINDOWPOS));
+					if(((wp.flags & SWP_NOMOVE) == 0) && ((wp.x != m_pt.X) || (wp.y != m_pt.Y)))
+					{
+						wp.x = m_pt.X;
+						wp.y = m_pt.Y;
+						Marshal.StructureToPtr(wp, m.LParam, false);
+					}
+				}
+				catch(Exception ex) { FluentThemeExt.Report(ex); }
+			}
+			base.WndProc(ref m);
+		}
+	}
+}

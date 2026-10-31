@@ -120,6 +120,7 @@ namespace FluentTheme
 				m_cb.ItemHeight = ih;
 				if(selH.ToInt32() > 0) SendMessage(m_cb.Handle, CB_SETITEMHEIGHT, new IntPtr(-1), selH);
 			}
+			CenterEdit();
 			if(changed) m_cb.Invalidate();
 		}
 
@@ -144,6 +145,7 @@ namespace FluentTheme
 		private void OnHandleCreated(object sender, EventArgs e)
 		{
 			if(this.Handle == IntPtr.Zero) AssignHandle(m_cb.Handle);
+			CenterEdit();
 		}
 
 		private void OnHandleDestroyed(object sender, EventArgs e)
@@ -278,6 +280,33 @@ namespace FluentTheme
 				}
 			}
 			base.WndProc(ref m);
+			// Windows setzt das Textfeld bei jeder Größenänderung oben an – danach wieder mittig setzen
+			if((m_p != null) && ((m.Msg == WM_SIZE) || (m.Msg == WM_WINDOWPOSCHANGED))) CenterEdit();
+		}
+
+		private const int WM_SIZE = 0x0005, WM_WINDOWPOSCHANGED = 0x0047;
+
+		/// <summary>Textfeld (eigenes Fenster im Suchfeld) senkrecht mittig setzen, damit die Schrift
+		/// nicht oben klebt.</summary>
+		private void CenterEdit()
+		{
+			try
+			{
+				if(!m_cb.IsHandleCreated) return;
+				COMBOBOXINFO ci = new COMBOBOXINFO();
+				ci.cbSize = Marshal.SizeOf(typeof(COMBOBOXINFO));
+				if(!GetComboBoxInfo(m_cb.Handle, ref ci) || (ci.hwndItem == IntPtr.Zero)) return;
+				Rectangle er = EditRect();
+				if(er.IsEmpty) return;
+				// Höhe auf eine Textzeile begrenzen (das Textfeld schreibt immer oben in sein Fenster)
+				int h = Math.Min(er.Height, m_cb.Font.Height + D(2));
+				int top = (m_cb.ClientSize.Height - h) / 2;
+				if((Math.Abs(top - er.Top) < 1) && (h == er.Height)) return;
+				const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+				SetWindowPos(ci.hwndItem, IntPtr.Zero, er.Left, top, er.Width, h, SWP_NOZORDER | SWP_NOACTIVATE);
+				m_cb.Invalidate();
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 
 		private void Paint(IntPtr hdc)

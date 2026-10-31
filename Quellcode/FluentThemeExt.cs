@@ -1011,7 +1011,8 @@ namespace FluentTheme
 			ToolStripMenuItem miErr = new ToolStripMenuItem(L.T("Fehlerbericht kopieren"));
 			miErr.Click += delegate
 			{
-				string rep = ((s_lastError ?? string.Empty) + Environment.NewLine + s_toolbarInfo).Trim();
+				string rep = ((s_lastError ?? string.Empty) + Environment.NewLine + s_toolbarInfo +
+					Environment.NewLine + MenuStyler.MoveInfo).Trim();
 				if(rep.Length == 0) return;
 				Clipboard.SetText(rep);
 				MessageBox.Show(m_host.MainWindow, L.T("Der Fehlerbericht wurde in die Zwischenablage kopiert."),
