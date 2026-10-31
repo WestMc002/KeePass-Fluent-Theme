@@ -1,3 +1,8 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Drawing;
 using System.Reflection;
@@ -26,6 +31,10 @@ namespace FluentTheme
 		{
 			return (int)Math.Round(v * m_s);
 		}
+
+		/// <summary>Abstand der Überschrift vom linken Kartenrand (bei 100 %). Der Gruppenbaum
+		/// setzt ihn so, dass „Gruppen“ über dem Symbol der obersten Gruppe beginnt.</summary>
+		public int TitleIndent = 14;
 
 		private int Margin { get { return D(6); } }
 		private int Inner { get { return D(6); } }
@@ -83,6 +92,16 @@ namespace FluentTheme
 			m_host.Invalidate(new Rectangle(m, m, m_host.ClientSize.Width - 2 * m, this.HeaderH));
 		}
 
+		/// <summary>Abstand vom oberen Rand der Textzeile bis zur Grundlinie (in Pixeln).</summary>
+		private static int Ascent(Graphics g, Font f)
+		{
+			FontFamily ff = f.FontFamily;
+			float em = ff.GetEmHeight(f.Style);
+			if(em <= 0) return (int)Math.Round(f.Height * 0.8f);
+			float px = f.SizeInPoints * g.DpiY / 72f;
+			return (int)Math.Round(px * ff.GetCellAscent(f.Style) / em);
+		}
+
 		private void OnResize(object sender, EventArgs e)
 		{
 			m_host.Invalidate();
@@ -102,21 +121,30 @@ namespace FluentTheme
 				Gfx.Fill(g, card, D(8), m_p.Card);
 				Gfx.Stroke(g, card, D(8), m_p.Border);
 
-				Rectangle head = new Rectangle(card.Left + D(14), card.Top, card.Width - D(28), this.HeaderH);
-				TextFormatFlags tf = TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+				Rectangle head = new Rectangle(card.Left + D(this.TitleIndent), card.Top,
+					card.Width - D(this.TitleIndent) - D(14), this.HeaderH);
+				TextFormatFlags tf = TextFormatFlags.Left | TextFormatFlags.Top |
 					TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-				TextRenderer.DrawText(g, m_title, m_fTitle, head, m_p.Text, tf);
+
+				// Überschrift senkrecht mittig; der graue Zusatz (z. B. Datenbankname) steht auf
+				// derselben Grundlinie – einzeln zentriert säße er wegen der anderen Schrift höher
+				Font fs = m_host.Font;
+				int titleTop = head.Top + (head.Height - m_fTitle.Height) / 2;
+				int baseline = titleTop + Ascent(g, m_fTitle);
+				TextRenderer.DrawText(g, m_title, m_fTitle,
+					new Rectangle(head.Left, titleTop, head.Width, m_fTitle.Height), m_p.Text, tf);
 
 				if(m_sub.Length > 0)
 				{
 					int tw = TextRenderer.MeasureText(g, m_title, m_fTitle, Size.Empty,
 						TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
-					Rectangle rs = new Rectangle(head.Left + tw + D(14), head.Top,
-						Math.Max(0, head.Right - head.Left - tw - D(14)), head.Height);
-					TextRenderer.DrawText(g, m_sub, m_host.Font, rs, m_p.Sub, tf);
+					int subTop = baseline - Ascent(g, fs);
+					Rectangle rs = new Rectangle(head.Left + tw + D(14), subTop,
+						Math.Max(0, head.Right - head.Left - tw - D(14)), fs.Height);
+					TextRenderer.DrawText(g, m_sub, fs, rs, m_p.Sub, tf);
 				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 	}
-}
+}

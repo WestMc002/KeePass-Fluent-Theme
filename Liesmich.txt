@@ -57,7 +57,8 @@ Funktionen
 - Ein angezeigtes Passwort wird nach einstellbarer Zeit wieder
   verborgen (Standard: 15 Sekunden)
 - Höhe der Detailansicht passt sich automatisch an den Eintrag an
-- Info-Fenster: Klick auf "Fluent Theme x.y" unten in der Statusleiste
+- Info-Fenster: Klick auf "Fluent Theme x.y" unten rechts in der Statusleiste
+  (oder Extras > Fluent-Design > Info über Fluent Theme)
 
 
 Einstellungen
@@ -73,6 +74,7 @@ Alle Einstellungen stehen im Menü Extras > Fluent-Design:
 - Hover-Effekt in Eintragsliste und Gruppenbaum
 - Ablaufende Einträge hervorheben (7, 14, 30 Tage vorher oder nur abgelaufene)
 - Moderne Symbole in der Symbolleiste
+- Version in der Statusleiste (ein- oder ausblenden)
 - Fehlerbericht kopieren (nur bei Problemen)
 - Info über Fluent Theme
 

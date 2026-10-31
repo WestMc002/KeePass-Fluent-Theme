@@ -1,3 +1,8 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -43,6 +48,11 @@ namespace FluentTheme
 			public IntPtr hwndList;
 		}
 
+		private const uint RDW_INVALIDATE = 0x0001, RDW_ALLCHILDREN = 0x0080, RDW_FRAME = 0x0400;
+
+		[DllImport("user32.dll")]
+		private static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
+
 		[DllImport("user32.dll")]
 		private static extern IntPtr BeginPaint(IntPtr hWnd, out PAINTSTRUCT lpPaint);
 
@@ -83,6 +93,7 @@ namespace FluentTheme
 			cb.MouseMove += OnMouseMove;
 			cb.MouseLeave += OnMouseLeave;
 			cb.DrawItem += OnDrawItem;
+			cb.EnabledChanged += OnEnabledChanged;
 			// Das Umstellen legt das Feld neu an – dabei hängt sich OnHandleCreated schon ein.
 			// Deshalb danach nur einhängen, wenn noch nicht geschehen (sonst Ausnahme).
 			cb.DrawMode = DrawMode.OwnerDrawFixed;
@@ -124,6 +135,7 @@ namespace FluentTheme
 			m_cb.MouseMove -= OnMouseMove;
 			m_cb.MouseLeave -= OnMouseLeave;
 			m_cb.DrawItem -= OnDrawItem;
+			m_cb.EnabledChanged -= OnEnabledChanged;
 			m_cb.DrawMode = DrawMode.Normal;
 			if(this.Handle != IntPtr.Zero) ReleaseHandle();
 			m_cb.Invalidate();
@@ -142,6 +154,14 @@ namespace FluentTheme
 		private void OnFocusChanged(object sender, EventArgs e)
 		{
 			m_cb.Invalidate();
+		}
+
+		/// <summary>Nach Sperren/Entsperren (KeePass schaltet das Feld ab und wieder an) neu zeichnen,
+		/// samt Eingabefeld darin.</summary>
+		private void OnEnabledChanged(object sender, EventArgs e)
+		{
+			if(this.Handle == IntPtr.Zero) return;
+			RedrawWindow(this.Handle, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 		}
 
 		/// <summary>Liste der früheren Suchen: leer gar nicht erst öffnen, sonst abgerundet,

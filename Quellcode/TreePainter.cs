@@ -1,3 +1,8 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -15,6 +20,7 @@ namespace FluentTheme
 		private float m_s = 1f;
 		private bool m_hover = true;
 		private bool m_attached;
+		private EmptyBelow m_empty;
 
 		private const TextFormatFlags TfText = TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
 			TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
@@ -35,6 +41,7 @@ namespace FluentTheme
 			m_attached = true;
 			m_tv.DrawMode = TreeViewDrawMode.OwnerDrawAll;
 			m_tv.DrawNode += OnDrawNode;
+			m_empty = new EmptyBelow(this);
 		}
 
 		public void Detach()
@@ -42,6 +49,7 @@ namespace FluentTheme
 			if(!m_attached) return;
 			m_attached = false;
 			m_tv.DrawNode -= OnDrawNode;
+			if(m_empty != null) { m_empty.Detach(); m_empty = null; }
 			m_tv.DrawMode = TreeViewDrawMode.Normal;
 			m_tv.Invalidate();
 		}
@@ -82,13 +90,23 @@ namespace FluentTheme
 
 				// Markierung und Akzentstreifen beginnen an der Einrückung der Gruppe (direkt vor dem
 				// Pfeil), nicht ganz links – sonst ist bei Untergruppen viel Leerraum bis zum Symbol
-				int selLeft = Math.Max(row.Left + D(4), imgLeft - m_tv.Indent - D(2));
+				// Pfeil nur bei Untergruppen; die Wurzel hat keinen (KeePass blendet die Wurzellinien aus)
+				bool chev = ((node.Nodes.Count > 0) && (m_tv.ShowRootLines || (node.Parent != null)));
 				float chevX = imgLeft - m_tv.Indent / 2f + D(2); // Mitte des Pfeils
-				if(node.Nodes.Count == 0)
+				int minLeft = row.Left + D(4);
+				int selLeft;
+				if(chev) selLeft = Math.Max(minLeft, imgLeft - m_tv.Indent - D(2));
+				else
 				{
 					// Ohne Pfeil: Streifen genauso weit vor dem Symbol wie sonst vor dem Pfeil
-					int pillGap = (int)Math.Round(chevX - 3.5f * m_s) - (selLeft + D(3));
-					selLeft = Math.Max(row.Left + D(4), imgLeft + shift - pillGap - D(3));
+					int pillGap = (int)Math.Round(m_tv.Indent / 2f + D(1) - 3.5f * m_s);
+					selLeft = imgLeft + shift - pillGap - D(3);
+					if(selLeft < minLeft)
+					{
+						// Ganz links (Wurzel): Symbol und Text nach rechts rücken statt den Abstand zu verlieren
+						shift += minLeft - selLeft;
+						selLeft = minLeft;
+					}
 				}
 				Rectangle inner = Rectangle.FromLTRB(selLeft, row.Top + 1, row.Right - D(4), row.Bottom - 1);
 				if(selected)
@@ -100,7 +118,7 @@ namespace FluentTheme
 				}
 				else if(hot) Gfx.Fill(g, inner, D(4), m_p.Hover);
 
-				if(node.Nodes.Count > 0)
+				if(chev)
 				{
 					float cx = chevX; // Abstand zum Akzentstreifen (Klickbereich bleibt)
 					float cy = row.Top + row.Height / 2f;
@@ -159,6 +177,76 @@ namespace FluentTheme
 						new PointF(cx - h / 2f, cy + h) });
 			}
 			g.SmoothingMode = old;
+		}
+
+		/// <summary>Malt die leere Fläche unter der letzten Gruppe in Kartenfarbe aus. Solange die
+		/// Datenbank gesperrt ist, zeichnet Windows sie weiß, und nach dem Öffnen werden nur die
+		/// Zeilen mit Gruppen neu gezeichnet.</summary>
+		private sealed class EmptyBelow : NativeWindow
+		{
+			private const int WM_PAINT = 0x000F;
+			private readonly TreePainter m_owner;
+
+			public EmptyBelow(TreePainter owner)
+			{
+				m_owner = owner;
+				TreeView tv = owner.m_tv;
+				tv.HandleCreated += OnHandleCreated;
+				tv.HandleDestroyed += OnHandleDestroyed;
+				if(tv.IsHandleCreated && (this.Handle == IntPtr.Zero)) AssignHandle(tv.Handle);
+			}
+
+			public void Detach()
+			{
+				TreeView tv = m_owner.m_tv;
+				tv.HandleCreated -= OnHandleCreated;
+				tv.HandleDestroyed -= OnHandleDestroyed;
+				if(this.Handle != IntPtr.Zero) ReleaseHandle();
+			}
+
+			private void OnHandleCreated(object sender, EventArgs e)
+			{
+				if(this.Handle == IntPtr.Zero) AssignHandle(m_owner.m_tv.Handle);
+			}
+
+			private void OnHandleDestroyed(object sender, EventArgs e)
+			{
+				if(this.Handle != IntPtr.Zero) ReleaseHandle();
+			}
+
+			protected override void WndProc(ref Message m)
+			{
+				base.WndProc(ref m);
+				if(m.Msg != WM_PAINT) return;
+				try { Paint(); }
+				catch(Exception ex) { FluentThemeExt.Report(ex); }
+			}
+
+			private void Paint()
+			{
+				TreeView tv = m_owner.m_tv;
+				Palette p = m_owner.m_p;
+				if((p == null) || !m_owner.m_attached) return;
+
+				// Letzte sichtbare Gruppe: letzter Knoten, solange aufgeklappt jeweils das letzte Kind
+				int top = 0;
+				TreeNode n = ((tv.Nodes.Count > 0) ? tv.Nodes[tv.Nodes.Count - 1] : null);
+				while((n != null) && n.IsExpanded && (n.Nodes.Count > 0)) n = n.Nodes[n.Nodes.Count - 1];
+				if(n != null)
+				{
+					Rectangle b = n.Bounds;
+					if(b.Height <= 0) return; // Lage unbekannt – nichts übermalen
+					top = b.Bottom;
+				}
+
+				Size cs = tv.ClientSize;
+				if((top < 0) || (top >= cs.Height)) return;
+				using(Graphics g = Graphics.FromHwnd(tv.Handle))
+				using(SolidBrush br = new SolidBrush(p.Card))
+				{
+					g.FillRectangle(br, 0, top, cs.Width, cs.Height - top);
+				}
+			}
 		}
 	}
 }

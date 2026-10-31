@@ -1,3 +1,8 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -26,6 +31,7 @@ namespace FluentTheme
 		private const string CfgAutoHeight = "FluentTheme.DetailsAutoHeight";
 		private const string CfgReveal = "FluentTheme.RevealSeconds";
 		private const string CfgExpiryDays = "FluentTheme.ExpiryWarnDays";
+		private const string CfgShowVersion = "FluentTheme.ShowVersion";
 
 		private static string s_lastError;
 		private static string s_toolbarInfo = string.Empty;
@@ -98,7 +104,11 @@ namespace FluentTheme
 				m_lv = FindControl<ListView>(mf, "m_lvEntries");
 				m_rich = FindControl<RichTextBox>(mf, "m_richEntryView");
 
-				if((m_tv != null) && (m_tv.Parent != null)) m_treeCard = new CardFrame(m_tv.Parent);
+				if((m_tv != null) && (m_tv.Parent != null))
+				{
+					m_treeCard = new CardFrame(m_tv.Parent);
+					m_treeCard.TitleIndent = 18; // bündig mit dem Symbol der obersten Gruppe (siehe TreePainter)
+				}
 				if((m_lv != null) && (m_lv.Parent != null) && ((m_tv == null) || (m_lv.Parent != m_tv.Parent)))
 					m_listCard = new CardFrame(m_lv.Parent);
 
@@ -107,6 +117,7 @@ namespace FluentTheme
 					m_treePainter = new TreePainter(m_tv);
 					m_treePainter.Attach();
 					m_tv.AfterSelect += OnTreeAfterSelect;
+					m_tv.EnabledChanged += OnTreeEnabledChanged;
 				}
 
 				if(m_lv != null)
@@ -170,7 +181,11 @@ namespace FluentTheme
 				m_searchPainters.Clear();
 				if(m_painter != null) m_painter.Detach();
 				if(m_treePainter != null) m_treePainter.Detach();
-				if(m_tv != null) m_tv.AfterSelect -= OnTreeAfterSelect;
+				if(m_tv != null)
+				{
+					m_tv.AfterSelect -= OnTreeAfterSelect;
+					m_tv.EnabledChanged -= OnTreeEnabledChanged;
+				}
 				m_menus.Detach();
 				RemoveBadge();
 				if(m_dialogs != null) m_dialogs.Detach();
@@ -287,7 +302,8 @@ namespace FluentTheme
 					m_strips.Add(ts);
 					StyleToolStrip(ts);
 				}
-				EnsureBadge();
+				if(this.ShowVersion) EnsureBadge();
+				else RemoveBadge();
 				StyleMainToolbar();
 				StyleTabs();
 				if(m_dialogs != null) m_dialogs.Update(m_p, m_s);
@@ -719,6 +735,19 @@ namespace FluentTheme
 			catch(Exception ex) { Report(ex); }
 		}
 
+		/// <summary>Beim Sperren schaltet KeePass den Baum ab; abgeschaltet malt Windows die leere
+		/// Fläche weiß. Nach dem Entsperren Farbe setzen und alles neu zeichnen lassen.</summary>
+		private void OnTreeEnabledChanged(object sender, EventArgs e)
+		{
+			try
+			{
+				if((m_tv == null) || (m_p == null)) return;
+				if(m_tv.BackColor != m_p.Card) m_tv.BackColor = m_p.Card;
+				m_tv.Invalidate();
+			}
+			catch(Exception ex) { Report(ex); }
+		}
+
 		private void OnTreeAfterSelect(object sender, TreeViewEventArgs e)
 		{
 			if(m_tagFilter == null) return;
@@ -747,6 +776,12 @@ namespace FluentTheme
 				long v = m_host.CustomConfig.GetLong(CfgReveal, 15);
 				return (int)Math.Max(0, Math.Min(3600, v));
 			}
+		}
+
+		/// <summary>„Fluent Theme x.y“ unten rechts in der Statusleiste anzeigen.</summary>
+		private bool ShowVersion
+		{
+			get { return m_host.CustomConfig.GetBool(CfgShowVersion, true); }
 		}
 
 		private bool DetailsAutoHeight
@@ -957,6 +992,14 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miIcons);
 
+			ToolStripMenuItem miVersion = new ToolStripMenuItem("Version in der Statusleiste");
+			miVersion.Click += delegate
+			{
+				m_host.CustomConfig.SetBool(CfgShowVersion, !this.ShowVersion);
+				ApplyAll();
+			};
+			root.DropDownItems.Add(miVersion);
+
 			root.DropDownItems.Add(new ToolStripSeparator());
 			ToolStripMenuItem miErr = new ToolStripMenuItem("Fehlerbericht kopieren");
 			miErr.Click += delegate
@@ -1006,6 +1049,7 @@ namespace FluentTheme
 				int ed = this.ExpiryDays;
 				foreach(ToolStripMenuItem mi in expiryItems) mi.Checked = ((int)mi.Tag == ed);
 				miIcons.Checked = this.ModernIcons;
+				miVersion.Checked = this.ShowVersion;
 				miErr.Enabled = (!string.IsNullOrEmpty(s_lastError) || (s_toolbarInfo.Length > 0));
 			};
 

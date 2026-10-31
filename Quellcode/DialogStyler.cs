@@ -1,6 +1,12 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Reflection;
 using System.Windows.Forms;
 
@@ -15,10 +21,14 @@ namespace FluentTheme
 	{
 		private readonly Form m_main;
 		private readonly HashSet<Form> m_styled = new HashSet<Form>();
-		private readonly Dictionary<Button, ButtonSkin> m_buttons = new Dictionary<Button, ButtonSkin>();
+		private readonly Dictionary<ButtonBase, ButtonSkin> m_buttons = new Dictionary<ButtonBase, ButtonSkin>();
+		private readonly HashSet<Control> m_bgGuard = new HashSet<Control>();
 		private readonly Dictionary<TabControl, TabStripPainter> m_tabs = new Dictionary<TabControl, TabStripPainter>();
 		private readonly Dictionary<Control, QualityBarPainter> m_qbars = new Dictionary<Control, QualityBarPainter>();
+		private readonly Dictionary<Control, EditFramePainter> m_frames = new Dictionary<Control, EditFramePainter>();
 		private readonly HashSet<Control> m_hookedContainers = new HashSet<Control>();
+		private readonly HashSet<TabPage> m_cardPages = new HashSet<TabPage>();
+		private readonly HashSet<Form> m_alignHooked = new HashSet<Form>();
 		private Palette m_p;
 		private float m_s = 1f;
 		private EventInfo m_gwmEvent;
@@ -71,6 +81,8 @@ namespace FluentTheme
 			m_tabs.Clear();
 			foreach(QualityBarPainter qp in m_qbars.Values) qp.Detach();
 			m_qbars.Clear();
+			foreach(EditFramePainter fp in m_frames.Values) fp.Detach();
+			m_frames.Clear();
 		}
 
 		public void Update(Palette p, float scale)
@@ -142,6 +154,13 @@ namespace FluentTheme
 				if(f.IsHandleCreated) NativeMethods.SetTitleBar(f.Handle, m_p.Dark, m_p.Bg, m_p.Text, m_p.Border);
 				foreach(Control c in f.Controls) ApplyControl(c, f);
 				HookContainer(f, f);
+				if(m_alignHooked.Add(f))
+				{
+					// Erst nach dem Laden ausrichten (KeePass setzt Positionen und DPI-Skalierung vorher)
+					f.Shown += delegate { AlignLabels(f); };
+					f.Disposed += delegate { m_alignHooked.Remove(f); };
+				}
+				if(f.Visible) AlignLabels(f);
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 			finally { f.ResumeLayout(); }
@@ -176,7 +195,15 @@ namespace FluentTheme
 
 			try
 			{
-				if(c is PictureBox) { /* Banner und Bilder unverändert */ }
+				if(IsSeparator(c))
+				{
+					// Trennlinie (z. B. über den Knöpfen): statt der hellen Doppellinie eine feine Linie
+					SetBorderStyle(c, BorderStyle.None);
+					if(c is Label) c.Text = string.Empty;
+					if(c.Height <= c.Width) c.Height = 1; else c.Width = 1;
+					c.BackColor = p.Border;
+				}
+				else if(c is PictureBox) { /* Banner und Bilder unverändert */ }
 				else if(QualityBarPainter.IsQualityBar(c))
 				{
 					QualityBarPainter qp;
@@ -198,15 +225,28 @@ namespace FluentTheme
 					if(qp != null) qp.Update(p, m_s);
 				}
 				else if(c is Button) StyleButton((Button)c);
+				else if(((c is CheckBox) && (((CheckBox)c).Appearance == Appearance.Button)) ||
+					((c is RadioButton) && (((RadioButton)c).Appearance == Appearance.Button)))
+					StyleButton((ButtonBase)c); // Umschalt-Knöpfe wie „●●●“ (Passwort anzeigen)
 				else if((c is TextBoxBase) || (c is NumericUpDown))
 				{
-					c.BackColor = p.Card;
+					c.BackColor = FieldBg(p);
 					c.ForeColor = p.Text;
-					TextBox tb = (c as TextBox);
-					if((tb != null) && p.Dark && (tb.BorderStyle == BorderStyle.Fixed3D))
-						tb.BorderStyle = BorderStyle.FixedSingle;
-					ThemeNative(c, "DarkMode_Explorer", "Explorer");
+					if(m_bgGuard.Add(c))
+					{
+						// KeePass setzt die Farbe teils zurück (z. B. „Passwort-Wdh.“ nach dem Vergleich auf
+						// Weiß bzw. bei Abweichung auf Rot) – Weiß wird wieder Feldfarbe, Rot gedämpft
+						Control gc = c;
+						c.BackColorChanged += delegate { GuardFieldBg(gc); };
+						c.Disposed += delegate { m_bgGuard.Remove(gc); };
+					}
+					// Einzeilige Felder ohne Windows-Design: Rahmen kommt von EditFramePainter. Das
+					// Design würde beim Fokuswechsel seinen eigenen (im Dunkelmodus weißen) Rahmen animieren.
+					if((c is TextBox) && EditFramePainter.Wants(c)) ThemeNative(c, " ", " ");
+					else ThemeNative(c, "DarkMode_Explorer", "Explorer");
+					if(EditFramePainter.Wants(c)) Frame(c, p);
 				}
+				else if(c is DateTimePicker) Frame(c, p);
 				else if(c is ComboBox)
 				{
 					ComboBox cb = (ComboBox)c;
@@ -242,8 +282,15 @@ namespace FluentTheme
 					foreach(TabPage tp in tc.TabPages)
 					{
 						tp.UseVisualStyleBackColor = false;
-						tp.BackColor = p.Bg;
+						tp.BackColor = p.Card; // Inhalt auf einer Karte (siehe OnCardPaint)
 						tp.ForeColor = p.Text;
+						if(m_cardPages.Add(tp))
+						{
+							TabPage page = tp;
+							tp.Paint += OnCardPaint;
+							tp.Resize += delegate { page.Invalidate(); };
+							tp.Disposed += delegate { m_cardPages.Remove(page); };
+						}
 					}
 					TabStripPainter painter;
 					if(!m_tabs.TryGetValue(tc, out painter))
@@ -302,7 +349,137 @@ namespace FluentTheme
 				(c is FlowLayoutPanel) || (c is UserControl)) HookContainer(c, f);
 		}
 
-		private void StyleButton(Button b)
+		/// <summary>Eigener Rahmen für Kommentar- und Datumsfeld (siehe EditFramePainter).</summary>
+		private void Frame(Control c, Palette p)
+		{
+			EditFramePainter fp;
+			if(!m_frames.TryGetValue(c, out fp))
+			{
+				fp = new EditFramePainter(c);
+				m_frames[c] = fp;
+				Control fc = c;
+				c.Disposed += delegate
+				{
+					EditFramePainter e;
+					if(m_frames.TryGetValue(fc, out e)) { e.Detach(); m_frames.Remove(fc); }
+				};
+			}
+			fp.Update(p, m_s);
+		}
+
+		/// <summary>Hintergrund der Eingabefelder: auf der weißen Karte leicht abgesetzt (Windows 11).</summary>
+		internal static Color FieldBg(Palette p)
+		{
+			return (p.Dark ? Palette.Blend(p.Card, Color.White, 0.04) : Palette.Blend(p.Card, p.Bg, 0.35));
+		}
+
+		/// <summary>Registerkarten-Inhalt als Karte: runde Ecken in Fensterfarbe, feiner Rahmen.</summary>
+		private void OnCardPaint(object sender, PaintEventArgs e)
+		{
+			TabPage tp = (sender as TabPage);
+			Palette p = m_p;
+			if((tp == null) || (p == null)) return;
+			try
+			{
+				Rectangle r = tp.ClientRectangle;
+				if((r.Width < 4) || (r.Height < 4)) return;
+				int rad = (int)Math.Round(8 * m_s);
+				using(GraphicsPath path = Gfx.Round(new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1), rad))
+				using(Region outside = new Region(r))
+				{
+					outside.Exclude(path);
+					using(SolidBrush b = new SolidBrush(p.Bg)) { e.Graphics.FillRegion(b, outside); }
+				}
+				Gfx.Stroke(e.Graphics, r, rad, p.Border);
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Beschriftungen („Titel:“, „Benutzername:“ …) senkrecht mittig zum Feld daneben
+		/// setzen. Nur kleine Korrekturen (höchstens 8 px), damit nichts verrutscht.</summary>
+		private void AlignLabels(Control parent)
+		{
+			if((parent == null) || parent.IsDisposed || (m_p == null)) return;
+			try
+			{
+				int maxShift = (int)Math.Round(8 * m_s);
+				foreach(Control lb in parent.Controls)
+				{
+					if(!((lb is Label) || (lb is CheckBox)) || !lb.AutoSize) continue;
+					if(lb.Height >= 2 * lb.Font.Height) continue; // mehrzeilig
+					Control best = null;
+					int bestDiff = int.MaxValue;
+					int lbMid = lb.Top + lb.Height / 2;
+					foreach(Control c in parent.Controls)
+					{
+						if((c == lb) || !c.Visible || !IsField(c) || (c.Left < lb.Right - 4)) continue;
+						int diff = (c.Top + c.Height / 2) - lbMid;
+						if(Math.Abs(diff) > Math.Max(c.Height, lb.Height) / 2) continue;
+						if((best == null) || (Math.Abs(diff) < Math.Abs(bestDiff)) ||
+							((Math.Abs(diff) == Math.Abs(bestDiff)) && (c.Left < best.Left)))
+						{
+							best = c;
+							bestDiff = diff;
+						}
+					}
+					if((best != null) && (bestDiff != 0) && (Math.Abs(bestDiff) <= maxShift))
+						lb.Top += bestDiff;
+				}
+				foreach(Control child in parent.Controls)
+				{
+					if(child.Controls.Count > 0) AlignLabels(child);
+				}
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		private static bool IsField(Control c)
+		{
+			TextBoxBase tb = (c as TextBoxBase);
+			if(tb != null) return !tb.Multiline;
+			return ((c is ComboBox) || (c is DateTimePicker) || (c is NumericUpDown) ||
+				QualityBarPainter.IsQualityBar(c));
+		}
+
+		private void GuardFieldBg(Control c)
+		{
+			Palette p = m_p;
+			if((p == null) || c.IsDisposed) return;
+			Color want = FieldBg(p);
+			Color cur = c.BackColor;
+			if(cur.ToArgb() == want.ToArgb()) return;
+			Color target;
+			if((cur.ToArgb() == SystemColors.Window.ToArgb()) || (cur.ToArgb() == Color.White.ToArgb()) ||
+				(cur.ToArgb() == p.Card.ToArgb()) || (cur.ToArgb() == SystemColors.Control.ToArgb()))
+				target = want;
+			else target = Palette.Blend(want, cur, p.Dark ? 0.30 : 0.60); // z. B. Rot bei Abweichung
+			if(cur.ToArgb() != target.ToArgb()) c.BackColor = target;
+		}
+
+		/// <summary>Schmale Linie mit 3D-Rahmen (Label, Panel o. Ä.), die KeePass als Trenner nutzt.</summary>
+		private bool IsSeparator(Control c)
+		{
+			if((c.Controls.Count > 0) || (c is TextBoxBase) || (c is ButtonBase)) return false;
+			int lim = (int)Math.Round(3 * m_s) + 1;
+			bool thin = (((c.Height <= lim) && (c.Width > 4 * lim)) || ((c.Width <= lim) && (c.Height > 4 * lim)));
+			if(!thin) return false;
+			PropertyInfo pi = c.GetType().GetProperty("BorderStyle", BindingFlags.Instance | BindingFlags.Public);
+			if((pi == null) || (pi.PropertyType != typeof(BorderStyle))) return (c.BackColor == SeparatorColor());
+			return ((BorderStyle)pi.GetValue(c, null) != BorderStyle.None) || (c.BackColor == SeparatorColor());
+		}
+
+		private Color SeparatorColor()
+		{
+			return ((m_p != null) ? m_p.Border : Color.Empty);
+		}
+
+		private static void SetBorderStyle(Control c, BorderStyle bs)
+		{
+			PropertyInfo pi = c.GetType().GetProperty("BorderStyle", BindingFlags.Instance | BindingFlags.Public);
+			if((pi != null) && (pi.PropertyType == typeof(BorderStyle)) && pi.CanWrite) pi.SetValue(c, bs, null);
+		}
+
+		private void StyleButton(ButtonBase b)
 		{
 			ButtonSkin skin;
 			if(!m_buttons.TryGetValue(b, out skin))
@@ -319,12 +496,12 @@ namespace FluentTheme
 	/// bekommt die Akzentfarbe, alle anderen sind weiß bzw. dunkel mit feinem Rahmen.</summary>
 	internal sealed class ButtonSkin
 	{
-		private readonly Button m_b;
+		private readonly ButtonBase m_b;
 		private readonly DialogStyler m_owner;
 		private bool m_hot;
 		private bool m_down;
 
-		public ButtonSkin(Button b, DialogStyler owner)
+		public ButtonSkin(ButtonBase b, DialogStyler owner)
 		{
 			m_b = b;
 			m_owner = owner;
@@ -336,6 +513,18 @@ namespace FluentTheme
 			b.GotFocus += delegate { m_b.Invalidate(); };
 			b.LostFocus += delegate { m_b.Invalidate(); };
 			b.EnabledChanged += delegate { m_b.Invalidate(); };
+			CheckBox cb = (b as CheckBox);
+			if(cb != null) cb.CheckedChanged += delegate { m_b.Invalidate(); };
+			RadioButton rb = (b as RadioButton);
+			if(rb != null) rb.CheckedChanged += delegate { m_b.Invalidate(); };
+		}
+
+		private bool IsChecked()
+		{
+			CheckBox cb = (m_b as CheckBox);
+			if(cb != null) return cb.Checked;
+			RadioButton rb = (m_b as RadioButton);
+			return ((rb != null) && rb.Checked);
 		}
 
 		public void Apply()
@@ -353,7 +542,7 @@ namespace FluentTheme
 		private bool IsPrimary()
 		{
 			Form f = m_b.FindForm();
-			return ((f != null) && (f.AcceptButton == m_b));
+			return ((f != null) && (m_b is IButtonControl) && (f.AcceptButton == (IButtonControl)m_b));
 		}
 
 		private void OnPaint(object sender, PaintEventArgs e)
@@ -384,6 +573,7 @@ namespace FluentTheme
 				else
 				{
 					Color baseFill = (p.Dark ? p.BtnBg : p.Card);
+					if(IsChecked() && enabled) baseFill = Palette.Blend(baseFill, p.Pill, p.Dark ? 0.30 : 0.16);
 					fill = (!enabled ? Palette.Blend(baseFill, parentBg, 0.5) : (m_down ? p.Sel : (m_hot ? p.CardHover : baseFill)));
 					border = p.Border;
 					text = (enabled ? p.Text : Palette.Blend(p.Sub, fill, 0.35));
@@ -428,4 +618,4 @@ namespace FluentTheme
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 	}
-}
+}

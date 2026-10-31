@@ -1,6 +1,12 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 using KeePassLib;
@@ -27,6 +33,7 @@ namespace FluentTheme
 		private bool m_hoverEnabled = true;
 		private int m_expiryDays = 14;   // 0 = keine Ablauf-Badges
 		private Font m_badgeFont;
+		private EmptyAreaPainter m_empty;
 
 		/// <summary>Einträge, die innerhalb dieser Anzahl Tage ablaufen, bekommen ein oranges Badge
 		/// (abgelaufene immer ein rotes). 0 = Badges aus.</summary>
@@ -82,6 +89,7 @@ namespace FluentTheme
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 
 			m_lv.OwnerDraw = true;
+			m_empty = new EmptyAreaPainter(this);
 		}
 
 		public void Detach()
@@ -97,6 +105,7 @@ namespace FluentTheme
 			m_lv.ItemSelectionChanged -= OnItemSelectionChanged;
 			m_lv.GotFocus -= OnFocusChanged;
 			m_lv.LostFocus -= OnFocusChanged;
+			if(m_empty != null) { m_empty.Detach(); m_empty = null; }
 
 			try
 			{
@@ -127,7 +136,8 @@ namespace FluentTheme
 			if(m_lv.IsHandleCreated)
 			{
 				// Hell: Standard-Design ohne Explorer-Hover-Animation (verursacht Flackern),
-				// dunkel: DarkMode_Explorer für dunkle Scrollleisten.
+				// dunkel: DarkMode_Explorer für dunkle Scrollleisten. Die senkrechten Spaltenlinien,
+				// die dieses Design unter den Einträgen zeichnet, übermalt EmptyAreaPainter.
 				NativeMethods.ThemeControl(m_lv, p.Dark, "DarkMode_Explorer", null);
 				IntPtr hdr = NativeMethods.GetListHeader(m_lv);
 				NativeMethods.ThemeHandle(hdr, p.Dark, "DarkMode_ItemsView", "ItemsView");
@@ -245,14 +255,26 @@ namespace FluentTheme
 
 		private void OnDrawItem(object sender, DrawListViewItemEventArgs e)
 		{
+			// In der Detailansicht zeichnet OnDrawSubItem (Spalte 0) die ganze Zeile – erst dort,
+			// weil das dunkle Windows-Design nach diesem Schritt noch seine eigene, eckige
+			// Auswahl über die Zeile legt.
+			if((m_p == null) || (m_lv.View != View.Details)) e.DrawDefault = true;
+		}
+
+		private void OnDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
+		{
 			if((m_p == null) || (m_lv.View != View.Details)) { e.DrawDefault = true; return; }
+			if(e.ColumnIndex != 0) return; // schon mit Spalte 0 gezeichnet
+			if(!PaintRow(e.Graphics, e.Item, e.ItemIndex)) e.DrawDefault = true;
+		}
+
+		/// <summary>Ganze Zeile in einem Durchgang (Hintergrund + alle Spalten), damit beim
+		/// Überfahren nichts zwischenzeitlich leer aufblitzt.</summary>
+		private bool PaintRow(Graphics g, ListViewItem item, int itemIndex)
+		{
 			try
 			{
-				// Ganze Zeile in einem Durchgang zeichnen (Hintergrund + alle Spalten),
-				// damit beim Überfahren nichts zwischenzeitlich leer aufblitzt.
-				Graphics g = e.Graphics;
-				Rectangle row = e.Bounds;
-				ListViewItem item = e.Item;
+				Rectangle row = item.Bounds;
 
 				Color bg = m_p.Pane;
 				PwEntry pe = GetEntry(item);
@@ -266,7 +288,7 @@ namespace FluentTheme
 					Color sc = (m_lv.Focused ? m_p.Sel : Palette.Blend(bg, m_p.Sel, 0.7));
 					Gfx.Fill(g, inner, D(4), sc);
 				}
-				else if(m_hoverEnabled && (e.ItemIndex == m_hot))
+				else if(m_hoverEnabled && (itemIndex == m_hot))
 					Gfx.Fill(g, inner, D(4), m_p.Hover);
 				else
 				{
@@ -347,10 +369,12 @@ namespace FluentTheme
 							TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
 						int bw = bsz.Width + D(14);
 						int bh = Math.Min(row.Height - D(6), bsz.Height + D(6));
+						// Breite mit denselben Flags wie beim Zeichnen messen (inkl. Innenabstand),
+						// sonst kürzt Windows den Titel mit „…“, obwohl er hineinpasst
 						int tw = TextRenderer.MeasureText(g, text, f, Size.Empty,
-							TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width;
+							TfCell & ~TextFormatFlags.EndEllipsis).Width;
 						// Badge direkt hinter dem Titel, bei wenig Platz am rechten Rand der Spalte
-						int bx = Math.Min(tx + tw + D(8), cell.Right - D(6) - bw);
+						int bx = Math.Min(tx + tw + D(6), cell.Right - D(6) - bw);
 						if(bx > tx + D(30))
 						{
 							Rectangle rb = new Rectangle(bx, cell.Top + (cell.Height - bh) / 2, bw, bh);
@@ -358,7 +382,7 @@ namespace FluentTheme
 							Color btc = (m_p.Dark ? badgeColor : Palette.Blend(badgeColor, Color.Black, 0.1));
 							TextRenderer.DrawText(g, badge, m_badgeFont, rb, btc, TextFormatFlags.HorizontalCenter |
 								TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
-							textRight = bx - D(6);
+							textRight = bx - D(2);
 						}
 					}
 					Rectangle tr = new Rectangle(tx, cell.Top, Math.Max(0, textRight - tx), cell.Height);
@@ -373,18 +397,13 @@ namespace FluentTheme
 					Gfx.Fill(g, new Rectangle(inner.Left, row.Top + (row.Height - ph) / 2, D(3), ph),
 						D(2), m_p.Pill);
 				}
+				return true;
 			}
 			catch(Exception ex)
 			{
 				FluentThemeExt.Report(ex);
-				e.DrawDefault = true;
+				return false;
 			}
-		}
-
-		private void OnDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
-		{
-			// Alles wird bereits in OnDrawItem gezeichnet.
-			if((m_p == null) || (m_lv.View != View.Details)) e.DrawDefault = true;
 		}
 
 		private void InvalidateRow(int index)
@@ -426,5 +445,153 @@ namespace FluentTheme
 		{
 			m_lv.Invalidate();
 		}
+
+		/// <summary>Malt die leere Fläche unter dem letzten Eintrag in der Listenfarbe aus. Im dunklen
+		/// Windows-Design zeichnet die Liste dort sonst senkrechte Spaltenlinien bis zum unteren Rand.</summary>
+		private sealed class EmptyAreaPainter : NativeWindow
+		{
+			private const int WM_PAINT = 0x000F;
+
+			[StructLayout(LayoutKind.Sequential)]
+			private struct RECT
+			{
+				public int Left, Top, Right, Bottom;
+			}
+
+			[DllImport("user32.dll")]
+			private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+			[DllImport("user32.dll")]
+			private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+			[DllImport("user32.dll", EntryPoint = "SendMessageW")]
+			private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+			[DllImport("user32.dll", EntryPoint = "SendMessageW")]
+			private static extern IntPtr SendRect(IntPtr hWnd, int msg, IntPtr wParam, ref RECT lParam);
+
+			private const int HDM_GETITEMCOUNT = 0x1200, HDM_GETITEMRECT = 0x1207;
+
+			private readonly EntryListPainter m_owner;
+			private readonly HeaderFiller m_header;
+
+			public EmptyAreaPainter(EntryListPainter owner)
+			{
+				m_owner = owner;
+				m_header = new HeaderFiller(this);
+				ListView lv = owner.m_lv;
+				lv.HandleCreated += OnHandleCreated;
+				lv.HandleDestroyed += OnHandleDestroyed;
+				if(lv.IsHandleCreated && (this.Handle == IntPtr.Zero)) AssignHandle(lv.Handle);
+				m_header.Attach(NativeMethods.GetListHeader(lv));
+			}
+
+			public void Detach()
+			{
+				ListView lv = m_owner.m_lv;
+				lv.HandleCreated -= OnHandleCreated;
+				lv.HandleDestroyed -= OnHandleDestroyed;
+				m_header.Detach();
+				if(this.Handle != IntPtr.Zero) ReleaseHandle();
+			}
+
+			private void OnHandleCreated(object sender, EventArgs e)
+			{
+				if(this.Handle == IntPtr.Zero) AssignHandle(m_owner.m_lv.Handle);
+				m_header.Attach(NativeMethods.GetListHeader(m_owner.m_lv));
+			}
+
+			private void OnHandleDestroyed(object sender, EventArgs e)
+			{
+				m_header.Detach();
+				if(this.Handle != IntPtr.Zero) ReleaseHandle();
+			}
+
+			/// <summary>Spaltenkopf rechts neben der letzten Spalte: Windows malt die freie Fläche dort
+			/// im dunklen Design als schwarzen Block – in Listenfarbe mit Linie unten übermalen.</summary>
+			private sealed class HeaderFiller : NativeWindow
+			{
+				private const int WM_PAINT = 0x000F;
+				private readonly EmptyAreaPainter m_parent;
+
+				public HeaderFiller(EmptyAreaPainter parent)
+				{
+					m_parent = parent;
+				}
+
+				public void Attach(IntPtr hdr)
+				{
+					if((hdr == IntPtr.Zero) || (this.Handle == hdr)) return;
+					if(this.Handle != IntPtr.Zero) ReleaseHandle();
+					AssignHandle(hdr);
+				}
+
+				public void Detach()
+				{
+					if(this.Handle != IntPtr.Zero) ReleaseHandle();
+				}
+
+				protected override void WndProc(ref Message m)
+				{
+					base.WndProc(ref m);
+					if(m.Msg != WM_PAINT) return;
+					try { m_parent.PaintHeaderFiller(this.Handle); }
+					catch(Exception ex) { FluentThemeExt.Report(ex); }
+				}
+			}
+
+			private void PaintHeaderFiller(IntPtr hdr)
+			{
+				Palette p = m_owner.m_p;
+				if((p == null) || !m_owner.m_attached) return;
+				RECT cr;
+				if(!GetClientRect(hdr, out cr)) return;
+				int n = SendMessage(hdr, HDM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero).ToInt32();
+				int right = 0;
+				for(int i = 0; i < n; ++i)
+				{
+					RECT ir = new RECT();
+					SendRect(hdr, HDM_GETITEMRECT, new IntPtr(i), ref ir);
+					right = Math.Max(right, ir.Right);
+				}
+				int w = cr.Right - cr.Left, h = cr.Bottom - cr.Top;
+				if((right >= w) || (h <= 0)) return;
+				using(Graphics g = Graphics.FromHwnd(hdr))
+				{
+					using(SolidBrush b = new SolidBrush(p.Pane)) { g.FillRectangle(b, right, 0, w - right, h); }
+					using(Pen pen = new Pen(p.Border)) { g.DrawLine(pen, right, h - 1, w, h - 1); }
+				}
+			}
+
+			protected override void WndProc(ref Message m)
+			{
+				base.WndProc(ref m);
+				if(m.Msg != WM_PAINT) return;
+				try { Paint(); }
+				catch(Exception ex) { FluentThemeExt.Report(ex); }
+			}
+
+			private void Paint()
+			{
+				ListView lv = m_owner.m_lv;
+				Palette p = m_owner.m_p;
+				if((p == null) || !m_owner.m_attached || (lv.View != View.Details)) return;
+
+				int top = 0;
+				IntPtr hdr = NativeMethods.GetListHeader(lv);
+				RECT hr;
+				if((hdr != IntPtr.Zero) && GetWindowRect(hdr, out hr)) top = Math.Max(0, hr.Bottom - hr.Top);
+				int n = lv.Items.Count;
+				if(n > 0) top = Math.Max(top, lv.GetItemRect(n - 1).Bottom);
+
+				Size cs = lv.ClientSize;
+				if(top >= cs.Height) return;
+				using(Graphics g = Graphics.FromHwnd(lv.Handle))
+				using(SolidBrush b = new SolidBrush(p.Pane))
+				{
+					g.FillRectangle(b, 0, top, cs.Width, cs.Height - top);
+				}
+			}
+		}
 	}
-}
+}

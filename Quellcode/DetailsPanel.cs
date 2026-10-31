@@ -1,3 +1,8 @@
+// KeePass Fluent Theme – Windows-11-Design für KeePass 2.x
+// Copyright (C) 2026 Günther Schoder · https://www.westmc002.de
+// Lizenz: GNU General Public License v3.0 oder später (siehe LICENSE)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -356,20 +361,33 @@ namespace FluentTheme
 		/// <summary>„Kopiert ✓ · wird nach x s geleert“ links neben dem gedrückten Kopieren-Knopf.</summary>
 		private void DrawCopiedLabel(Graphics g, Rectangle rb, int minX)
 		{
-			string txt = "Kopiert";
+			// Lange Fassung, wenn Platz ist, sonst kürzer – nie über den Wert schreiben oder abschneiden
+			List<string> variants = new List<string>();
 			if(m_clearSeconds > 0)
-				txt += " · Zwischenablage wird nach " + m_clearSeconds.ToString(CultureInfo.CurrentCulture) +
-					" s geleert";
-			int tw = TextWidth(g, txt, m_fLabel) + D(16);
+			{
+				string sec = m_clearSeconds.ToString(CultureInfo.CurrentCulture) + " s";
+				variants.Add("Kopiert · Zwischenablage wird nach " + sec + " geleert");
+				variants.Add("Kopiert · wird nach " + sec + " geleert");
+			}
+			variants.Add("Kopiert");
+
+			int avail = rb.Left - D(6) - minX;
+			string txt = null;
+			int tw = 0;
+			foreach(string v in variants)
+			{
+				tw = TextWidth(g, v, m_fLabel) + D(16);
+				if(tw <= avail) { txt = v; break; }
+			}
+			if(txt == null) return; // nicht einmal „Kopiert“ passt – der Haken am Knopf genügt
+
 			int h = m_fLabel.Height + D(8);
-			int x = Math.Max(minX, rb.Left - D(6) - tw);
-			Rectangle r = new Rectangle(x, rb.Top + (rb.Height - h) / 2, rb.Left - D(6) - x, h);
-			if(r.Width < D(40)) return;
+			Rectangle r = new Rectangle(rb.Left - D(6) - tw, rb.Top + (rb.Height - h) / 2, tw, h);
 			Color bg = Palette.Blend(m_p.Card, m_p.Good, m_p.Dark ? 0.25 : 0.14);
 			Gfx.Fill(g, r, h / 2, bg);
 			TextRenderer.DrawText(g, txt, m_fLabel, r, m_p.Dark ? m_p.Good : Palette.Blend(m_p.Good, Color.Black, 0.15),
 				TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
-				TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+				TextFormatFlags.NoPrefix);
 		}
 
 		private Hit HitAt(Point pt)
@@ -586,8 +604,10 @@ namespace FluentTheme
 
 			if(!copiedBtn.IsEmpty)
 			{
-				// Rückmeldung über das Ende des Werts legen (Knöpfe links davon bleiben sichtbar)
-				int minX = vx + D(40);
+				// Rückmeldung erst hinter dem Wert – der Wert bleibt ganz lesbar. Reicht der Platz nicht,
+				// wählt DrawCopiedLabel eine kürzere Fassung oder lässt nur den Haken am Knopf stehen
+				int valueW = TextWidth(g, (shown.Length > 0) ? shown : "–", font);
+				int minX = vx + Math.Min(rv.Width, valueW) + D(8);
 				DrawCopiedLabel(g, new Rectangle(bx + D(2), copiedBtn.Top, copiedBtn.Width, copiedBtn.Height), minX);
 			}
 
@@ -689,12 +709,14 @@ namespace FluentTheme
 			// Code
 			int vx = lx + lw;
 			string shown = Totp.Pretty(code);
+			int codeRight = vx;
 			using(Font fc = MakeFont("Consolas", SizeTitle - 1f, FontStyle.Bold, FontStyle.Bold))
 			{
 				int cw = TextWidth(g, shown, fc);
 				Rectangle rc = new Rectangle(vx, y, Math.Min(cw + D(4), Math.Max(0, bx - vx)), rowH);
 				TextRenderer.DrawText(g, shown, fc, rc, m_p.Text, TfLine);
 				AddHit(rc, CopyTotp, "Klicken zum Kopieren");
+				codeRight = rc.Right;
 
 				// Countdown-Ring
 				int rs = D(18);
@@ -722,7 +744,7 @@ namespace FluentTheme
 				}
 			}
 
-			if(rb == m_copiedRect) DrawCopiedLabel(g, rb, vx + D(40));
+			if(rb == m_copiedRect) DrawCopiedLabel(g, rb, codeRight + D(8)); // Code bleibt lesbar
 
 			if(lineBelow)
 			{
