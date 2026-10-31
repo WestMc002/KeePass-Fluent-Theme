@@ -197,7 +197,10 @@ namespace FluentTheme
 				{
 					Rectangle r = m_tc.GetTabRect(i);
 					bool sel = (i == m_tc.SelectedIndex);
-					Rectangle pill = Rectangle.FromLTRB(r.Left + D(2), r.Top + D(2), r.Right - D(2), r.Bottom - D(1));
+					// KeePass legt die Höhe der Leiste fest; die Tabs können unten darüber hinausragen.
+					// Die Fläche deshalb an der sichtbaren Höhe ausrichten, oben und unten gleicher Abstand.
+					int bottom = Math.Min(r.Bottom, m_tc.ClientSize.Height) - D(3);
+					Rectangle pill = Rectangle.FromLTRB(r.Left + D(2), r.Top + D(3), r.Right - D(2), bottom);
 
 					// Aktive Datenbank blau hinterlegt wie die Auswahl in Liste und Gruppenbaum
 					if(sel) Gfx.Fill(g, pill, D(6), m_p.Sel);

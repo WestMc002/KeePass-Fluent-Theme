@@ -481,7 +481,7 @@ namespace FluentTheme
 
 		}
 
-		/// <summary>Datenbank-Tabs: größere Schrift, aktiver Tab als weiße Karte mit Akzentstrich.</summary>
+		/// <summary>Datenbank-Tabs: größere Schrift, aktiver Tab blau hinterlegt.</summary>
 		private void StyleTabs()
 		{
 			if(m_tabs == null) return;
@@ -493,7 +493,9 @@ namespace FluentTheme
 			catch(ArgumentException) { m_tabFontSel = new Font("Segoe UI", 10f, FontStyle.Bold); }
 
 			m_tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
-			m_tabs.Font = m_tabFont;
+			// Breite der Tabs nach der fetten Schrift bemessen, sonst ragt der Name der aktiven
+			// Datenbank über die blaue Fläche hinaus
+			m_tabs.Font = m_tabFontSel;
 			m_tabs.Padding = new Point(D(14), D(5));
 			if(m_tabs.Parent != null) m_tabs.Parent.BackColor = m_p.Bg;
 			foreach(TabPage tp in m_tabs.TabPages) tp.BackColor = m_p.Bg;
