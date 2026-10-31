@@ -63,7 +63,7 @@ namespace FluentTheme
 		private AboutDialog(Form owner, Palette p, string scheme)
 		{
 			m_p = p;
-			this.Text = "Info über " + AppName;
+			this.Text = L.F("Info über {0}", AppName);
 			this.Name = "FluentThemeAbout";
 			try { if((owner != null) && (owner.Icon != null)) this.Icon = owner.Icon; }
 			catch(Exception) { }
@@ -95,7 +95,7 @@ namespace FluentTheme
 			this.Controls.Add(MakeLabel(AppName, new Font("Segoe UI Semibold", 15f), p.Text,
 				new Rectangle(0, y, W, S(36))));
 			y += S(38);
-			this.Controls.Add(MakeLabel("Version " + Version, new Font("Segoe UI", 10.5f), p.Link,
+			this.Controls.Add(MakeLabel(L.F("Version {0}", Version), new Font("Segoe UI", 10.5f), p.Link,
 				new Rectangle(0, y, W, S(26))));
 			y += S(40);
 
@@ -118,28 +118,28 @@ namespace FluentTheme
 			try
 			{
 				dll = typeof(AboutDialog).Assembly.Location;
-				built = File.GetLastWriteTime(dll).ToString("dd.MM.yyyy");
+				built = File.GetLastWriteTime(dll).ToString(L.DateFormat);
 			}
 			catch(Exception) { }
 			string dir = string.Empty;
 			try { dir = Path.GetDirectoryName(dll); }
 			catch(Exception) { }
 
-			AddRow(table, tip, "Entwickler", Author);
-			AddRow(table, tip, "Erstellt", built);
-			AddRow(table, tip, "Farbschema", scheme);
-			AddRow(table, tip, "Plugin", (string.IsNullOrEmpty(dll) ? "-" : dll));
+			AddRow(table, tip, L.T("Entwickler"), Author);
+			AddRow(table, tip, L.T("Erstellt"), built);
+			AddRow(table, tip, L.T("Farbschema"), scheme);
+			AddRow(table, tip, L.T("Plugin"), (string.IsNullOrEmpty(dll) ? "-" : dll));
 			card.Controls.Add(table);
 			this.Controls.Add(card);
 			y += card.Height + S(24);
 
 			// ---------- Knöpfe ----------
-			InfoButton web = new InfoButton("Webseite", "globe", false, p, k);
+			InfoButton web = new InfoButton(L.T("Webseite"), "globe", false, p, k);
 			web.Click += delegate { Open(WebsiteUrl); };
-			InfoButton folder = new InfoButton("Plugin-Ordner", "open", false, p, k);
+			InfoButton folder = new InfoButton(L.T("Plugin-Ordner"), "open", false, p, k);
 			folder.Enabled = !string.IsNullOrEmpty(dir);
 			folder.Click += delegate { Open(dir); };
-			InfoButton close = new InfoButton("Schließen", null, true, p, k);
+			InfoButton close = new InfoButton(L.T("Schließen"), null, true, p, k);
 			close.DialogResult = DialogResult.Cancel;
 			int gap = S(14);
 			int total = web.Width + folder.Width + close.Width + 2 * gap;

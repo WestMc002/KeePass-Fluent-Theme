@@ -365,11 +365,10 @@ namespace FluentTheme
 			List<string> variants = new List<string>();
 			if(m_clearSeconds > 0)
 			{
-				string sec = m_clearSeconds.ToString(CultureInfo.CurrentCulture) + " s";
-				variants.Add("Kopiert · Zwischenablage wird nach " + sec + " geleert");
-				variants.Add("Kopiert · wird nach " + sec + " geleert");
+				variants.Add(L.F("Kopiert · Zwischenablage wird nach {0} s geleert", m_clearSeconds));
+				variants.Add(L.F("Kopiert · wird nach {0} s geleert", m_clearSeconds));
 			}
-			variants.Add("Kopiert");
+			variants.Add(L.T("Kopiert"));
 
 			int avail = rb.Left - D(6) - minX;
 			string txt = null;
@@ -425,8 +424,8 @@ namespace FluentTheme
 			catch(Exception ex)
 			{
 				FluentThemeExt.Report(ex);
-				TextRenderer.DrawText(g, "Detailansicht konnte nicht gezeichnet werden " +
-					"(Extras › Fluent-Design › Fehlerbericht kopieren).", m_fBase,
+				TextRenderer.DrawText(g, L.T("Detailansicht konnte nicht gezeichnet werden " +
+					"(Extras › Fluent-Design › Fehlerbericht kopieren)."), m_fBase,
 					this.ClientRectangle, m_p.Sub, TextFormatFlags.HorizontalCenter |
 					TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
 			}
@@ -441,8 +440,8 @@ namespace FluentTheme
 
 			if(m_entry == null)
 			{
-				string msg = ((m_selCount > 1) ? (m_selCount.ToString(CultureInfo.CurrentCulture) +
-					" Einträge ausgewählt") : "Kein Eintrag ausgewählt");
+				string msg = ((m_selCount > 1) ? L.F("{0} Einträge ausgewählt", m_selCount) :
+					L.T("Kein Eintrag ausgewählt"));
 				TextRenderer.DrawText(g, msg, m_fBase, this.ClientRectangle, m_p.Sub,
 					TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
 				SetContentHeight(0);
@@ -478,14 +477,14 @@ namespace FluentTheme
 				TextRenderer.DrawText(g, tags[i], m_fLabel, rc, m_p.BadgeText, TextFormatFlags.HorizontalCenter |
 					TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
 				string tag = tags[i];
-				AddHit(rc, delegate { OnTagClick(tag); }, "Alle Einträge mit dem Tag „" + tag + "“ anzeigen");
+				AddHit(rc, delegate { OnTagClick(tag); }, L.F("Alle Einträge mit dem Tag „{0}“ anzeigen", tag));
 				cx = rc.Left - D(6);
 			}
 
 			int titleW = Math.Max(D(40), cx - tx - D(8));
 			int ty = y + (tile - titleH - pathH) / 2;
 			string title = pe.Strings.ReadSafe(PwDefs.TitleField);
-			if(title.Length == 0) title = "(ohne Titel)";
+			if(title.Length == 0) title = L.T("(ohne Titel)");
 			TextRenderer.DrawText(g, title, m_fTitle, new Rectangle(tx, ty, titleW, titleH), m_p.Text, TfLine);
 			TextRenderer.DrawText(g, GroupPath(pe), m_fLabel, new Rectangle(tx, ty + titleH, titleW, pathH),
 				m_p.Sub, TfLine);
@@ -624,29 +623,29 @@ namespace FluentTheme
 		private int CardLogin(Graphics g, Rectangle r, bool draw)
 		{
 			PwEntry pe = m_entry;
-			int y = DrawCardFrame(g, r, "Anmeldedaten", draw);
-			int lw = LabelWidth(g, r, new string[] { "Benutzername", "Passwort", "URL" });
+			int y = DrawCardFrame(g, r, L.T("Anmeldedaten"), draw);
+			int lw = LabelWidth(g, r, new string[] { L.T("Benutzername"), L.T("Passwort"), L.T("URL") });
 
 			string user = pe.Strings.ReadSafe(PwDefs.UserNameField);
 			string pw = pe.Strings.ReadSafe(PwDefs.PasswordField);
 			string url = pe.Strings.ReadSafe(PwDefs.UrlField);
 
-			y = Row(g, r, y, lw, "Benutzername", user, m_fBase, m_p.Text, draw, true, null, null, new Btn[] {
-				new Btn(Glyph.Copy, "Benutzername kopieren", delegate { CopyField(pe, PwDefs.UserNameField); }) });
+			y = Row(g, r, y, lw, L.T("Benutzername"), user, m_fBase, m_p.Text, draw, true, null, null, new Btn[] {
+				new Btn(Glyph.Copy, L.T("Benutzername kopieren"), delegate { CopyField(pe, PwDefs.UserNameField); }) });
 
 			string pwShown = ((pw.Length == 0) ? string.Empty : (m_reveal ? pw : Mask));
-			y = Row(g, r, y, lw, "Passwort", pwShown, m_reveal ? m_fMono : m_fBase, m_p.Text, draw, true, null, null,
+			y = Row(g, r, y, lw, L.T("Passwort"), pwShown, m_reveal ? m_fMono : m_fBase, m_p.Text, draw, true, null, null,
 				new Btn[] {
-					new Btn(m_reveal ? Glyph.EyeOff : Glyph.Eye, m_reveal ? "Passwort verbergen" :
-						"Passwort anzeigen", ToggleReveal),
-					new Btn(Glyph.Copy, "Passwort kopieren", delegate { CopyField(pe, PwDefs.PasswordField); }) });
+					new Btn(m_reveal ? Glyph.EyeOff : Glyph.Eye, m_reveal ? L.T("Passwort verbergen") :
+						L.T("Passwort anzeigen"), ToggleReveal),
+					new Btn(Glyph.Copy, L.T("Passwort kopieren"), delegate { CopyField(pe, PwDefs.PasswordField); }) });
 
 			Action openUrl = null;
 			if(url.Trim().Length > 0) openUrl = delegate { KpCompat.OpenEntryUrl(m_host, pe); };
-			y = Row(g, r, y, lw, "URL", url, m_fBase, m_p.Link, draw, (pw.Length > 0) || (m_totp != null), url, openUrl,
+			y = Row(g, r, y, lw, L.T("URL"), url, m_fBase, m_p.Link, draw, (pw.Length > 0) || (m_totp != null), url, openUrl,
 				new Btn[] {
-				new Btn(Glyph.Open, "URL öffnen", delegate { KpCompat.OpenEntryUrl(m_host, pe); }),
-				new Btn(Glyph.Copy, "URL kopieren", delegate { CopyField(pe, PwDefs.UrlField); }) });
+				new Btn(Glyph.Open, L.T("URL öffnen"), delegate { KpCompat.OpenEntryUrl(m_host, pe); }),
+				new Btn(Glyph.Copy, L.T("URL kopieren"), delegate { CopyField(pe, PwDefs.UrlField); }) });
 
 			if(m_totp != null) y = TotpRow(g, r, y, lw, draw, pw.Length > 0);
 
@@ -659,10 +658,10 @@ namespace FluentTheme
 					int bits = m_bits;
 					Color c;
 					string lbl;
-					if(bits < 50) { c = m_p.Weak; lbl = "Schwach"; }
-					else if(bits < 80) { c = m_p.Mid; lbl = "Mittel"; }
-					else if(bits < 112) { c = m_p.Good; lbl = "Stark"; }
-					else { c = m_p.Good; lbl = "Sehr stark"; }
+					if(bits < 50) { c = m_p.Weak; lbl = L.T("Schwach"); }
+					else if(bits < 80) { c = m_p.Mid; lbl = L.T("Mittel"); }
+					else if(bits < 112) { c = m_p.Good; lbl = L.T("Stark"); }
+					else { c = m_p.Good; lbl = L.T("Sehr stark"); }
 
 					string txt = lbl + " · " + bits.ToString(CultureInfo.CurrentCulture) + " Bit";
 					int tw = TextWidth(g, txt, m_fLabel) + D(4);
@@ -699,12 +698,12 @@ namespace FluentTheme
 			}
 
 			int lx = r.Left + D(16);
-			TextRenderer.DrawText(g, "Einmalcode", m_fLabel, new Rectangle(lx, y, lw - D(8), rowH), m_p.Sub, TfLine);
+			TextRenderer.DrawText(g, L.T("Einmalcode"), m_fLabel, new Rectangle(lx, y, lw - D(8), rowH), m_p.Sub, TfLine);
 
 			int bs = this.ButtonSize;
 			int bx = r.Right - D(10) - bs;
 			Rectangle rb = new Rectangle(bx, y + (rowH - bs) / 2, bs, bs);
-			DrawIconButton(g, rb, new Btn(Glyph.Copy, "Einmalcode kopieren", CopyTotp));
+			DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("Einmalcode kopieren"), CopyTotp));
 
 			// Code
 			int vx = lx + lw;
@@ -715,7 +714,7 @@ namespace FluentTheme
 				int cw = TextWidth(g, shown, fc);
 				Rectangle rc = new Rectangle(vx, y, Math.Min(cw + D(4), Math.Max(0, bx - vx)), rowH);
 				TextRenderer.DrawText(g, shown, fc, rc, m_p.Text, TfLine);
-				AddHit(rc, CopyTotp, "Klicken zum Kopieren");
+				AddHit(rc, CopyTotp, L.T("Klicken zum Kopieren"));
 				codeRight = rc.Right;
 
 				// Countdown-Ring
@@ -768,7 +767,7 @@ namespace FluentTheme
 		private int CardFields(Graphics g, Rectangle r, bool draw)
 		{
 			PwEntry pe = m_entry;
-			int y = DrawCardFrame(g, r, "Weitere Felder", draw);
+			int y = DrawCardFrame(g, r, L.T("Weitere Felder"), draw);
 
 			List<KeyValuePair<string, ProtectedString>> list = new List<KeyValuePair<string, ProtectedString>>();
 			foreach(KeyValuePair<string, ProtectedString> kvp in pe.Strings)
@@ -785,7 +784,7 @@ namespace FluentTheme
 			if(list.Count == 0)
 			{
 				if(draw)
-					TextRenderer.DrawText(g, "Keine weiteren Felder", m_fLabel, new Rectangle(r.Left + D(16), y,
+					TextRenderer.DrawText(g, L.T("Keine weiteren Felder"), m_fLabel, new Rectangle(r.Left + D(16), y,
 						r.Width - D(32), m_rowH), m_p.Sub, TfLine);
 				return y + m_rowH + D(4) - r.Top;
 			}
@@ -805,17 +804,17 @@ namespace FluentTheme
 
 				List<Btn> bl = new List<Btn>();
 				if(prot)
-					bl.Add(new Btn(m_reveal ? Glyph.EyeOff : Glyph.Eye, m_reveal ? "Verbergen" : "Anzeigen",
+					bl.Add(new Btn(m_reveal ? Glyph.EyeOff : Glyph.Eye, m_reveal ? L.T("Verbergen") : L.T("Anzeigen"),
 						ToggleReveal));
 				Action open = null;
 				if(isUrl)
 				{
 					string u = val.Trim();
 					open = delegate { KpCompat.OpenUrl(m_host, u, pe); };
-					bl.Add(new Btn(Glyph.Open, "Öffnen", open));
+					bl.Add(new Btn(Glyph.Open, L.T("Öffnen"), open));
 				}
 				string k = key;
-				bl.Add(new Btn(Glyph.Copy, key + " kopieren", delegate { CopyField(pe, k); }));
+				bl.Add(new Btn(Glyph.Copy, L.F("{0} kopieren", key), delegate { CopyField(pe, k); }));
 
 				y = Row(g, r, y, lw, key, masked ? ((val.Length > 0) ? Mask : string.Empty) : val,
 					(prot && m_reveal) ? m_fMono : m_fBase, isUrl ? m_p.Link : m_p.Text, draw,
@@ -826,12 +825,12 @@ namespace FluentTheme
 
 		private static string FmtDate(DateTime utc)
 		{
-			return utc.ToLocalTime().ToString("dd.MM.yyyy", CultureInfo.CurrentCulture);
+			return utc.ToLocalTime().ToString(L.DateFormat, CultureInfo.CurrentCulture);
 		}
 
 		private static string FmtDateTime(DateTime utc)
 		{
-			return utc.ToLocalTime().ToString("dd.MM.yyyy HH:mm", CultureInfo.CurrentCulture);
+			return utc.ToLocalTime().ToString(L.DateFormat + " HH:mm", CultureInfo.CurrentCulture);
 		}
 
 		private int MetaHeight
@@ -852,7 +851,7 @@ namespace FluentTheme
 		private int CardInfo(Graphics g, Rectangle r, bool draw)
 		{
 			PwEntry pe = m_entry;
-			int y = DrawCardFrame(g, r, "Notizen und Info", draw);
+			int y = DrawCardFrame(g, r, L.T("Notizen und Info"), draw);
 			int innerX = r.Left + D(16);
 			int innerW = Math.Max(D(40), r.Width - D(32));
 
@@ -862,7 +861,7 @@ namespace FluentTheme
 			if(notes.Length == 0)
 			{
 				if(draw)
-					TextRenderer.DrawText(g, "Keine Notizen", m_fLabel, new Rectangle(innerX, y, innerW, m_rowH),
+					TextRenderer.DrawText(g, L.T("Keine Notizen"), m_fLabel, new Rectangle(innerX, y, innerW, m_rowH),
 						m_p.Sub, TfLine);
 				y += m_rowH;
 			}
@@ -881,7 +880,7 @@ namespace FluentTheme
 				{
 					Rectangle rn = new Rectangle(innerX, y + D(4), textW, nh);
 					TextRenderer.DrawText(g, notes, m_fBase, rn, m_p.Text, nf);
-					DrawIconButton(g, rb, new Btn(Glyph.Copy, "Notizen kopieren",
+					DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("Notizen kopieren"),
 						delegate { CopyField(pe, PwDefs.NotesField); }));
 					if(rb == m_copiedRect)
 						DrawCopiedLabel(g, rb, innerX + D(40));
@@ -890,7 +889,7 @@ namespace FluentTheme
 
 				if(canExpand)
 				{
-					string more = (m_notesExpanded ? "Weniger anzeigen" : "Mehr anzeigen");
+					string more = (m_notesExpanded ? L.T("Weniger anzeigen") : L.T("Mehr anzeigen"));
 					int lh = m_fLabel.Height + D(6);
 					if(draw)
 					{
@@ -919,12 +918,12 @@ namespace FluentTheme
 				using(Pen p = new Pen(m_p.RowLine)) { g.DrawLine(p, r.Left + D(10), y, r.Right - D(10), y); }
 
 				int colW = innerW / 3;
-				MetaCell(g, innerX, y, colW, "Erstellt", FmtDate(pe.CreationTime), m_p.Text,
+				MetaCell(g, innerX, y, colW, L.T("Erstellt"), FmtDate(pe.CreationTime), m_p.Text,
 					FmtDateTime(pe.CreationTime));
-				MetaCell(g, innerX + colW, y, colW, "Geändert", FmtDate(pe.LastModificationTime), m_p.Text,
+				MetaCell(g, innerX + colW, y, colW, L.T("Geändert"), FmtDate(pe.LastModificationTime), m_p.Text,
 					FmtDateTime(pe.LastModificationTime));
 
-				string exp = "nie";
+				string exp = L.T("nie");
 				string expTip = null;
 				Color ec = m_p.Text;
 				if(pe.Expires)
@@ -934,10 +933,10 @@ namespace FluentTheme
 					if(pe.ExpiryTime <= DateTime.UtcNow)
 					{
 						ec = m_p.Weak;
-						expTip += " (abgelaufen)";
+						expTip += L.T(" (abgelaufen)");
 					}
 				}
-				MetaCell(g, innerX + 2 * colW, y, innerW - 2 * colW, "Läuft ab", exp, ec, expTip);
+				MetaCell(g, innerX + 2 * colW, y, innerW - 2 * colW, L.T("Läuft ab"), exp, ec, expTip);
 			}
 			y += this.MetaHeight;
 
@@ -947,7 +946,7 @@ namespace FluentTheme
 				if(draw)
 				{
 					using(Pen p = new Pen(m_p.RowLine)) { g.DrawLine(p, r.Left + D(10), y, r.Right - D(10), y); }
-					TextRenderer.DrawText(g, "Anhänge", m_fLabel, new Rectangle(innerX, y + D(8), innerW,
+					TextRenderer.DrawText(g, L.T("Anhänge"), m_fLabel, new Rectangle(innerX, y + D(8), innerW,
 						m_fLabel.Height + D(2)), m_p.Sub, TfLine);
 				}
 				y += D(12) + m_fLabel.Height;
@@ -960,8 +959,8 @@ namespace FluentTheme
 						string name = kvp.Key;
 						ProtectedBinary pb = kvp.Value;
 						Btn[] ab = new Btn[] {
-							new Btn(Glyph.Open, "Öffnen", delegate { OpenAttachment(name, pb); }),
-							new Btn(Glyph.Save, "Speichern unter …", delegate { KpCompat.SaveBinary(this.FindForm(), name, pb); }) };
+							new Btn(Glyph.Open, L.T("Öffnen"), delegate { OpenAttachment(name, pb); }),
+							new Btn(Glyph.Save, L.T("Speichern unter …"), delegate { KpCompat.SaveBinary(this.FindForm(), name, pb); }) };
 						int bx = r.Right - D(10);
 						for(int i = ab.Length - 1; i >= 0; --i)
 						{
@@ -974,7 +973,7 @@ namespace FluentTheme
 						Rectangle rName = new Rectangle(innerX, y, Math.Max(0, bx - D(10) - sw - D(10) - innerX), lineH);
 						TextRenderer.DrawText(g, name, m_fBase, rName, m_p.Text, TfLine);
 						TextRenderer.DrawText(g, sz, m_fLabel, new Rectangle(bx - D(10) - sw, y, sw + D(2), lineH), m_p.Sub, TfLine);
-						AddHit(rName, delegate { OpenAttachment(name, pb); }, "Öffnen: " + name);
+						AddHit(rName, delegate { OpenAttachment(name, pb); }, L.F("Öffnen: {0}", name));
 					}
 					y += lineH;
 				}

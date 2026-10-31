@@ -199,13 +199,8 @@ namespace FluentTheme
 					bool sel = (i == m_tc.SelectedIndex);
 					Rectangle pill = Rectangle.FromLTRB(r.Left + D(2), r.Top + D(2), r.Right - D(2), r.Bottom - D(1));
 
-					if(sel)
-					{
-						Gfx.Fill(g, pill, D(6), m_p.Card);
-						Gfx.Stroke(g, pill, D(6), m_p.Border);
-						Gfx.Fill(g, new Rectangle(pill.Left + pill.Width / 2 - D(10), pill.Bottom - D(4), D(20), D(3)),
-							D(1), m_p.Pill);
-					}
+					// Aktive Datenbank blau hinterlegt wie die Auswahl in Liste und Gruppenbaum
+					if(sel) Gfx.Fill(g, pill, D(6), m_p.Sel);
 					else if(i == m_hot)
 						Gfx.Fill(g, pill, D(6), Palette.Blend(m_p.Bg, m_p.Text, m_p.Dark ? 0.08 : 0.05));
 
@@ -219,4 +214,4 @@ namespace FluentTheme
 			}
 		}
 	}
-}
+}

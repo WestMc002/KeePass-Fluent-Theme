@@ -73,5 +73,7 @@ jobs:
           **Installation:** KeePass beenden, ``FluentTheme.dll`` in den Ordner ``Plugins`` von KeePass kopieren (z. B. ``C:\Program Files (x86)\KeePass\Plugins``) und KeePass starten.
 
           Bei einem Update die vorhandene ``FluentTheme.dll`` einfach ersetzen.
+
+          **Installation (English):** close KeePass, copy ``FluentTheme.dll`` into the ``Plugins`` folder of KeePass (e.g. ``C:\Program Files (x86)\KeePass\Plugins``) and start KeePass. To update, simply replace the existing ``FluentTheme.dll``.
           "@
           gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes $notes --target $env:GITHUB_SHA

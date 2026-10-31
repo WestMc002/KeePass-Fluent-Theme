@@ -228,16 +228,16 @@ namespace FluentTheme
 			if(pb == null) return;
 			using(SaveFileDialog dlg = new SaveFileDialog())
 			{
-				dlg.Title = "Anhang speichern";
+				dlg.Title = L.T("Anhang speichern");
 				dlg.FileName = name;
-				dlg.Filter = "Alle Dateien (*.*)|*.*";
+				dlg.Filter = L.T("Alle Dateien (*.*)|*.*");
 				dlg.OverwritePrompt = true;
 				if(dlg.ShowDialog(owner) != DialogResult.OK) return;
 				try { File.WriteAllBytes(dlg.FileName, pb.ReadData()); }
 				catch(Exception ex)
 				{
-					MessageBox.Show(owner, "Der Anhang konnte nicht gespeichert werden:" + Environment.NewLine +
-						ex.Message, "Fluent-Design", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+					MessageBox.Show(owner, L.T("Der Anhang konnte nicht gespeichert werden:") + Environment.NewLine +
+						ex.Message, L.T("Fluent-Design"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
 				}
 			}
 		}
@@ -279,7 +279,7 @@ namespace FluentTheme
 			// 2. Eigene virtuelle Gruppe mit den Treffern
 			try
 			{
-				PwGroup pg = new PwGroup(true, true, "Tag: " + tag, PwIcon.Key);
+				PwGroup pg = new PwGroup(true, true, L.F("Tag: {0}", tag), PwIcon.Key);
 				pg.IsVirtual = true;
 				foreach(PwEntry pe in host.Database.RootGroup.GetEntries(true))
 				{
@@ -322,4 +322,4 @@ namespace FluentTheme
 			return pw.Length * 4;
 		}
 	}
-}
+}

@@ -320,7 +320,7 @@ namespace FluentTheme
 					DateTime now = DateTime.UtcNow;
 					if(pe.ExpiryTime <= now)
 					{
-						badge = "Abgelaufen";
+						badge = L.T("Abgelaufen");
 						badgeColor = m_p.Weak;
 					}
 					else if(m_expiryDays > 0)
@@ -328,8 +328,8 @@ namespace FluentTheme
 						int days = (int)Math.Floor((pe.ExpiryTime.ToLocalTime().Date - DateTime.Now.Date).TotalDays);
 						if(days <= m_expiryDays)
 						{
-							badge = ((days <= 0) ? "heute" : ((days == 1) ? "morgen" :
-								("in " + days.ToString(System.Globalization.CultureInfo.CurrentCulture) + " Tagen")));
+							badge = ((days <= 0) ? L.T("heute") : ((days == 1) ? L.T("morgen") :
+								L.F("in {0} Tagen", days)));
 							badgeColor = m_p.Mid;
 						}
 					}

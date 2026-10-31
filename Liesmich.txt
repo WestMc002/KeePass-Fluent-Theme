@@ -34,7 +34,8 @@ Funktionen
 - Windows-Akzentfarbe oder eine eigene Akzentfarbe
 - Moderne Menüs, Symbolleiste mit farbigen Fluent-Symbolen,
   Registerkarten und schmale Scrollleisten
-- Gestaltete KeePass-Dialoge (Eintrag bearbeiten, Optionen usw.)
+- Gestaltete KeePass-Dialoge (Eintrag bearbeiten, Optionen usw.):
+  Inhalt auf einer Karte, einheitliche Eingabefelder mit Akzentlinie
 - Gruppenbaum und Eintragsliste mit abgerundeter Auswahl, Akzentstreifen
   und Hover-Effekt; Zeilenhöhe einstellbar
 - Ablaufende Einträge in der Liste markiert: rotes Badge "Abgelaufen",
@@ -84,6 +85,8 @@ Die Einstellungen speichert KeePass in seiner Konfigurationsdatei
 
 Hinweise
 --------
+- Sprache: Das Plugin folgt der Sprache von KeePass. Ist KeePass auf
+  Deutsch eingestellt, erscheint es auf Deutsch, sonst auf Englisch.
 - Das Plugin ändert keine Daten in der Datenbank, nur die Darstellung.
 - Wie lange KeePass die Zwischenablage nach dem Kopieren behält,
   stellt man in KeePass selbst ein: Extras > Optionen > Sicherheit.

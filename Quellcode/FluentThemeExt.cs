@@ -95,6 +95,7 @@ namespace FluentTheme
 		{
 			if(host == null) return false;
 			m_host = host;
+			L.Init(); // Sprache von KeePass übernehmen (Deutsch oder Englisch)
 
 			try
 			{
@@ -597,8 +598,8 @@ namespace FluentTheme
 		{
 			if(m_p == null) return;
 			ThemeMode m = this.Mode;
-			string scheme = (m_p.Dark ? "dunkel" : "hell") +
-				((m == ThemeMode.System) ? " (folgt Windows)" : " (fest eingestellt)");
+			string scheme = L.T(m_p.Dark ? "dunkel" : "hell") +
+				L.T((m == ThemeMode.System) ? " (folgt Windows)" : " (fest eingestellt)");
 			AboutDialog.ShowFor(m_host.MainWindow, m_p, scheme);
 		}
 
@@ -691,22 +692,20 @@ namespace FluentTheme
 					}
 				}
 				catch(Exception) { db = string.Empty; }
-				m_treeCard.SetHeader("Gruppen", db);
+				m_treeCard.SetHeader(L.T("Gruppen"), db);
 			}
 
 			if((m_listCard != null) && (m_lv != null))
 			{
-				string title = "Einträge";
+				string title = L.T("Einträge");
 				if((m_tv != null) && (m_tv.SelectedNode != null)) title = m_tv.SelectedNode.Text;
 				if((m_tagFilter != null) && !ListShowsTag(m_tagFilter)) m_tagFilter = null;
-				if(m_tagFilter != null) title = "Tag „" + m_tagFilter + "“";
+				if(m_tagFilter != null) title = L.F("Tag „{0}“", m_tagFilter);
 
 				int n = m_lv.Items.Count;
 				int k = m_lv.SelectedIndices.Count;
-				string sub = n.ToString(System.Globalization.CultureInfo.CurrentCulture) +
-					((n == 1) ? " Eintrag" : " Einträge");
-				if(k > 0) sub += " · " + k.ToString(System.Globalization.CultureInfo.CurrentCulture) +
-					" ausgewählt";
+				string sub = L.F((n == 1) ? "{0} Eintrag" : "{0} Einträge", n);
+				if(k > 0) sub += " · " + L.F("{0} ausgewählt", k);
 				m_listCard.SetHeader(title, sub);
 			}
 		}
@@ -865,13 +864,13 @@ namespace FluentTheme
 		{
 			if(t != PluginMenuType.Main) return null;
 
-			ToolStripMenuItem root = new ToolStripMenuItem("Fluent-Design");
+			ToolStripMenuItem root = new ToolStripMenuItem(L.T("Fluent-Design"));
 
-			ToolStripMenuItem miSys = new ToolStripMenuItem("Wie Windows (automatisch)");
+			ToolStripMenuItem miSys = new ToolStripMenuItem(L.T("Wie Windows (automatisch)"));
 			miSys.Click += delegate { SetMode(ThemeMode.System); };
-			ToolStripMenuItem miLight = new ToolStripMenuItem("Hell");
+			ToolStripMenuItem miLight = new ToolStripMenuItem(L.T("Hell"));
 			miLight.Click += delegate { SetMode(ThemeMode.Light); };
-			ToolStripMenuItem miDark = new ToolStripMenuItem("Dunkel");
+			ToolStripMenuItem miDark = new ToolStripMenuItem(L.T("Dunkel"));
 			miDark.Click += delegate { SetMode(ThemeMode.Dark); };
 			root.DropDownItems.Add(miSys);
 			root.DropDownItems.Add(miLight);
@@ -879,7 +878,7 @@ namespace FluentTheme
 			root.DropDownItems.Add(new ToolStripSeparator());
 
 			// Akzentfarbe
-			ToolStripMenuItem miAccent = new ToolStripMenuItem("Akzentfarbe");
+			ToolStripMenuItem miAccent = new ToolStripMenuItem(L.T("Akzentfarbe"));
 			List<ToolStripMenuItem> accentItems = new List<ToolStripMenuItem>();
 			string[,] accents = new string[,] {
 				{ "Windows-Akzentfarbe (Standard)", "" },
@@ -894,7 +893,7 @@ namespace FluentTheme
 			for(int i = 0; i < accents.GetLength(0); ++i)
 			{
 				string hex = accents[i, 1];
-				ToolStripMenuItem mi = new ToolStripMenuItem(accents[i, 0]);
+				ToolStripMenuItem mi = new ToolStripMenuItem(L.T(accents[i, 0]));
 				mi.Tag = hex;
 				Color sw = Palette.DefaultAccent;
 				if(hex.Length == 0) sw = Palette.SystemAccent();
@@ -905,18 +904,18 @@ namespace FluentTheme
 				accentItems.Add(mi);
 			}
 			miAccent.DropDownItems.Add(new ToolStripSeparator());
-			ToolStripMenuItem miCustom = new ToolStripMenuItem("Eigene Farbe …");
+			ToolStripMenuItem miCustom = new ToolStripMenuItem(L.T("Eigene Farbe …"));
 			miCustom.Click += delegate { PickCustomAccent(); };
 			miAccent.DropDownItems.Add(miCustom);
 			root.DropDownItems.Add(miAccent);
 
 			// Zeilenhöhe
-			ToolStripMenuItem miRows = new ToolStripMenuItem("Zeilenhöhe");
-			ToolStripMenuItem miR24 = new ToolStripMenuItem("Kompakt");
+			ToolStripMenuItem miRows = new ToolStripMenuItem(L.T("Zeilenhöhe"));
+			ToolStripMenuItem miR24 = new ToolStripMenuItem(L.T("Kompakt"));
 			miR24.Click += delegate { SetRowHeight(24); };
-			ToolStripMenuItem miR28 = new ToolStripMenuItem("Normal");
+			ToolStripMenuItem miR28 = new ToolStripMenuItem(L.T("Normal"));
 			miR28.Click += delegate { SetRowHeight(28); };
-			ToolStripMenuItem miR32 = new ToolStripMenuItem("Groß");
+			ToolStripMenuItem miR32 = new ToolStripMenuItem(L.T("Groß"));
 			miR32.Click += delegate { SetRowHeight(32); };
 			miRows.DropDownItems.Add(miR24);
 			miRows.DropDownItems.Add(miR28);
@@ -924,7 +923,7 @@ namespace FluentTheme
 			root.DropDownItems.Add(miRows);
 
 			root.DropDownItems.Add(new ToolStripSeparator());
-			ToolStripMenuItem miDetails = new ToolStripMenuItem("Moderne Detailansicht");
+			ToolStripMenuItem miDetails = new ToolStripMenuItem(L.T("Moderne Detailansicht"));
 			miDetails.Click += delegate
 			{
 				m_host.CustomConfig.SetBool(CfgDetails, !this.ModernDetails);
@@ -932,7 +931,7 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miDetails);
 
-			ToolStripMenuItem miAutoH = new ToolStripMenuItem("Höhe der Detailansicht automatisch anpassen");
+			ToolStripMenuItem miAutoH = new ToolStripMenuItem(L.T("Höhe der Detailansicht automatisch anpassen"));
 			miAutoH.Click += delegate
 			{
 				m_host.CustomConfig.SetBool(CfgAutoHeight, !this.DetailsAutoHeight);
@@ -940,12 +939,12 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miAutoH);
 
-			ToolStripMenuItem miReveal = new ToolStripMenuItem("Angezeigtes Passwort wieder verbergen");
+			ToolStripMenuItem miReveal = new ToolStripMenuItem(L.T("Angezeigtes Passwort wieder verbergen"));
 			List<ToolStripMenuItem> revealItems = new List<ToolStripMenuItem>();
 			foreach(int sec in new int[] { 10, 15, 30, 60, 0 })
 			{
-				string txt = ((sec == 0) ? "Nie" : ("Nach " + sec.ToString() + " Sekunden" +
-					((sec == 15) ? " (Standard)" : string.Empty)));
+				string txt = ((sec == 0) ? L.T("Nie") : (L.F("Nach {0} Sekunden", sec) +
+					((sec == 15) ? L.T(" (Standard)") : string.Empty)));
 				ToolStripMenuItem mi = new ToolStripMenuItem(txt);
 				mi.Tag = sec;
 				int v = sec;
@@ -958,7 +957,7 @@ namespace FluentTheme
 				miReveal.DropDownItems.Add(mi);
 			}
 			root.DropDownItems.Add(miReveal);
-			ToolStripMenuItem miHover = new ToolStripMenuItem("Hover-Effekt in der Eintragsliste");
+			ToolStripMenuItem miHover = new ToolStripMenuItem(L.T("Hover-Effekt in der Eintragsliste"));
 			miHover.Click += delegate
 			{
 				m_host.CustomConfig.SetBool(CfgHover, !this.ListHover);
@@ -966,12 +965,12 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miHover);
 
-			ToolStripMenuItem miExpiry = new ToolStripMenuItem("Ablaufende Einträge hervorheben");
+			ToolStripMenuItem miExpiry = new ToolStripMenuItem(L.T("Ablaufende Einträge hervorheben"));
 			List<ToolStripMenuItem> expiryItems = new List<ToolStripMenuItem>();
 			foreach(int days in new int[] { 7, 14, 30, 0 })
 			{
-				string txt = ((days == 0) ? "Nur abgelaufene" : ("Bis " + days.ToString() + " Tage vorher" +
-					((days == 14) ? " (Standard)" : string.Empty)));
+				string txt = ((days == 0) ? L.T("Nur abgelaufene") : (L.F("Bis {0} Tage vorher", days) +
+					((days == 14) ? L.T(" (Standard)") : string.Empty)));
 				ToolStripMenuItem mi = new ToolStripMenuItem(txt);
 				mi.Tag = days;
 				int v = days;
@@ -984,7 +983,7 @@ namespace FluentTheme
 				miExpiry.DropDownItems.Add(mi);
 			}
 			root.DropDownItems.Add(miExpiry);
-			ToolStripMenuItem miIcons = new ToolStripMenuItem("Moderne Symbole in der Symbolleiste");
+			ToolStripMenuItem miIcons = new ToolStripMenuItem(L.T("Moderne Symbole in der Symbolleiste"));
 			miIcons.Click += delegate
 			{
 				m_host.CustomConfig.SetBool(CfgIcons, !this.ModernIcons);
@@ -992,7 +991,7 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miIcons);
 
-			ToolStripMenuItem miVersion = new ToolStripMenuItem("Version in der Statusleiste");
+			ToolStripMenuItem miVersion = new ToolStripMenuItem(L.T("Version in der Statusleiste"));
 			miVersion.Click += delegate
 			{
 				m_host.CustomConfig.SetBool(CfgShowVersion, !this.ShowVersion);
@@ -1001,19 +1000,19 @@ namespace FluentTheme
 			root.DropDownItems.Add(miVersion);
 
 			root.DropDownItems.Add(new ToolStripSeparator());
-			ToolStripMenuItem miErr = new ToolStripMenuItem("Fehlerbericht kopieren");
+			ToolStripMenuItem miErr = new ToolStripMenuItem(L.T("Fehlerbericht kopieren"));
 			miErr.Click += delegate
 			{
 				string rep = ((s_lastError ?? string.Empty) + Environment.NewLine + s_toolbarInfo).Trim();
 				if(rep.Length == 0) return;
 				Clipboard.SetText(rep);
-				MessageBox.Show(m_host.MainWindow, "Der Fehlerbericht wurde in die Zwischenablage kopiert.",
-					"Fluent-Design", MessageBoxButtons.OK, MessageBoxIcon.Information);
+				MessageBox.Show(m_host.MainWindow, L.T("Der Fehlerbericht wurde in die Zwischenablage kopiert."),
+					L.T("Fluent-Design"), MessageBoxButtons.OK, MessageBoxIcon.Information);
 			};
 			root.DropDownItems.Add(miErr);
 
 			root.DropDownItems.Add(new ToolStripSeparator());
-			ToolStripMenuItem miAbout = new ToolStripMenuItem("Info über Fluent Theme …");
+			ToolStripMenuItem miAbout = new ToolStripMenuItem(L.T("Info über Fluent Theme …"));
 			miAbout.Click += delegate { ShowAbout(); };
 			root.DropDownItems.Add(miAbout);
 

@@ -35,7 +35,7 @@ namespace FluentTheme
 			SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
 				ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
 			this.Cursor = Cursors.Hand;
-			m_tip.SetToolTip(this, "Info über Fluent Theme");
+			m_tip.SetToolTip(this, L.T("Info über Fluent Theme"));
 		}
 
 		private static string VersionText

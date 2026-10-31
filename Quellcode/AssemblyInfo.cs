@@ -7,7 +7,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 
 [assembly: AssemblyTitle("Fluent Theme")]
-[assembly: AssemblyDescription("Modernes Windows-11-Design für KeePass 2.x: Hell/Dunkel, Akzentfarbe, kompakte Liste und Detailansicht mit eigenen Feldern.")]
+// KeePass zeigt die Beschreibung in Extras > Plugins an – ein Text für beide Sprachen
+[assembly: AssemblyDescription("Windows 11 (Fluent) design for KeePass 2.x: light/dark mode, accent color, card-style entry details. English/Deutsch.")]
 [assembly: AssemblyConfiguration("")]
 // Ausnahme zur globalen Vorgabe „kein Firmenfeld“: KeePass zeigt AssemblyCompany in
 // Extras > Plugins als „Autor“ an – ohne diesen Eintrag bleibt die Spalte leer.
@@ -17,4 +18,4 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
-// Versionsnummer wird von Erstellen.bat in VersionInfo.cs erzeugt (Haupt.Neben.Jahr.MonatTag, dazu AppInfo.Version).
+// Versionsnummer wird von Erstellen.bat in VersionInfo.cs erzeugt (Haupt.Neben.Jahr.MonatTag, dazu AppInfo.Version).
