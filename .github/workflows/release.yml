@@ -1,0 +1,77 @@
+# KeePass Fluent Theme - automatische Bereitstellung der FluentTheme.dll
+# Baut das Plugin, sobald sich keepass.version auf main aendert (oder per Hand
+# ueber "Run workflow"), und legt ein Release mit der DLL an.
+# Existiert das Release zur Version schon, passiert nichts.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [keepass.version]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version lesen
+        id: ver
+        shell: pwsh
+        run: |
+          $line = Get-Content keepass.version | Where-Object { $_ -match '^Fluent Theme:' } | Select-Object -First 1
+          if(-not $line) { throw 'keine Version in keepass.version' }
+          $ver = $line.Split(':')[1].Trim()
+          "ver=$ver" >> $env:GITHUB_OUTPUT
+          gh release view "v$ver" *> $null
+          if($LASTEXITCODE -eq 0) { "exists=1" >> $env:GITHUB_OUTPUT; Write-Host "Release v$ver existiert bereits" }
+          else { "exists=0" >> $env:GITHUB_OUTPUT }
+          exit 0
+
+      - name: KeePass installieren (nur als Verweis zum Kompilieren)
+        if: steps.ver.outputs.exists == '0'
+        shell: pwsh
+        run: |
+          choco install keepass -y --no-progress
+          $kp = Get-ChildItem 'C:\Program Files*' -Recurse -Filter KeePass.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if(-not $kp) { throw 'KeePass.exe nicht gefunden' }
+          "KPEXE=$($kp.FullName)" >> $env:GITHUB_ENV
+
+      - name: Kompilieren
+        if: steps.ver.outputs.exists == '0'
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.ver.outputs.ver }}'
+          @(
+            "[assembly: System.Reflection.AssemblyVersion(`"$ver`")]"
+            "[assembly: System.Reflection.AssemblyFileVersion(`"$ver`")]"
+            "[assembly: System.Reflection.AssemblyInformationalVersion(`"$ver`")]"
+            "namespace FluentTheme { public static partial class AppInfo { public const string Version = `"$ver`"; } }"
+          ) | Set-Content Quellcode\VersionInfo.cs -Encoding utf8
+          New-Item -ItemType Directory -Force Bin | Out-Null
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:library /optimize+ /codepage:65001 /out:Bin\FluentTheme.dll `
+            "/resource:Resources\GS-Logo.png,GS-Logo.png" `
+            /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
+            "/r:$env:KPEXE" Quellcode\*.cs
+          if($LASTEXITCODE -ne 0) { throw 'Kompilieren fehlgeschlagen' }
+          (Get-Item Bin\FluentTheme.dll).VersionInfo.FileVersion
+
+      - name: Release anlegen
+        if: steps.ver.outputs.exists == '0'
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.ver.outputs.ver }}'
+          $notes = @"
+          **Installation:** KeePass beenden, ``FluentTheme.dll`` in den Ordner ``Plugins`` von KeePass kopieren (z. B. ``C:\Program Files (x86)\KeePass\Plugins``) und KeePass starten.
+
+          Bei einem Update die vorhandene ``FluentTheme.dll`` einfach ersetzen.
+          "@
+          gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes $notes --target $env:GITHUB_SHA
