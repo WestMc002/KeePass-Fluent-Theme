@@ -1,0 +1,89 @@
+﻿Fluent Theme für KeePass 2.x
+============================
+
+Autor: Günther Schoder · www.westmc002.de
+© 2026 Günther Schoder
+
+
+Was ist das?
+------------
+Fluent Theme ist ein Plugin für KeePass 2.x, das KeePass ein modernes
+Windows-11-Design gibt. Das gewohnte Layout bleibt erhalten:
+Gruppenbaum links, Eintragsliste rechts, Detailansicht darunter.
+
+
+Installation
+------------
+1. KeePass beenden.
+2. FluentTheme.dll in den Ordner "Plugins" von KeePass kopieren,
+   z. B. C:\Program Files (x86)\KeePass\Plugins
+   (dafür sind Administratorrechte nötig).
+3. KeePass starten.
+
+Entfernen: KeePass beenden und FluentTheme.dll aus dem Ordner
+"Plugins" löschen.
+
+Aus dem Quellcode erstellen: Erstellen.bat im Projektordner starten.
+Sie kompiliert das Plugin, sichert das Projekt unter Backup, kopiert
+die DLL in den Plugins-Ordner und startet KeePass danach neu.
+
+
+Funktionen
+----------
+- Windows-11-Farben, Hell- und Dunkelmodus (folgt Windows oder fest)
+- Windows-Akzentfarbe oder eine eigene Akzentfarbe
+- Moderne Menüs, Symbolleiste mit farbigen Fluent-Symbolen,
+  Registerkarten und schmale Scrollleisten
+- Gestaltete KeePass-Dialoge (Eintrag bearbeiten, Optionen usw.)
+- Gruppenbaum und Eintragsliste mit abgerundeter Auswahl, Akzentstreifen
+  und Hover-Effekt; Zeilenhöhe einstellbar
+- Ablaufende Einträge in der Liste markiert: rotes Badge "Abgelaufen",
+  oranges Badge "in x Tagen" (Zeitspanne einstellbar, Standard 14 Tage)
+- Detailansicht als Karten:
+  - Anmeldedaten mit Kopieren-, Anzeigen- und Öffnen-Knöpfen
+  - Anzeige des Einmalcodes (TOTP) mit Countdown und Kopieren-Knopf für
+    Einträge mit 2FA-Geheimnis (Felder "TimeOtp-Secret-..." von KeePass
+    oder ein Feld "otp" im Format von KeePassXC/KeeOtp). Eingerichtet wird
+    die Zwei-Faktor-Anmeldung weiterhin in KeePass bzw. einem TOTP-Plugin.
+  - Tags im Kopf anklickbar: zeigt alle Einträge mit diesem Tag
+    (Klick auf eine Gruppe hebt den Filter wieder auf)
+  - Passwortstärke als Balken
+  - weitere Felder (z. B. "URL 2"), Links sind anklickbar
+  - Notizen mit Kopieren-Knopf, lange Notizen lassen sich aufklappen
+  - Anhänge per Klick öffnen oder speichern
+  - Erstellt / Geändert / Läuft ab
+- Nach dem Kopieren erscheint kurz "Kopiert" mit dem Hinweis, nach
+  wie vielen Sekunden KeePass die Zwischenablage leert
+- Ein angezeigtes Passwort wird nach einstellbarer Zeit wieder
+  verborgen (Standard: 15 Sekunden)
+- Höhe der Detailansicht passt sich automatisch an den Eintrag an
+- Info-Fenster: Klick auf "Fluent Theme x.y" unten in der Statusleiste
+
+
+Einstellungen
+-------------
+Alle Einstellungen stehen im Menü Extras > Fluent-Design:
+
+- Wie Windows / Hell / Dunkel
+- Akzentfarbe (Standard: Windows-Akzentfarbe)
+- Zeilenhöhe der Eintragsliste (24, 28 oder 32 Pixel)
+- Moderne Detailansicht (aus = KeePass-Standardansicht)
+- Höhe der Detailansicht automatisch anpassen
+- Angezeigtes Passwort wieder verbergen (10, 15, 30, 60 Sekunden oder nie)
+- Hover-Effekt in Eintragsliste und Gruppenbaum
+- Ablaufende Einträge hervorheben (7, 14, 30 Tage vorher oder nur abgelaufene)
+- Moderne Symbole in der Symbolleiste
+- Fehlerbericht kopieren (nur bei Problemen)
+- Info über Fluent Theme
+
+Die Einstellungen speichert KeePass in seiner Konfigurationsdatei
+(KeePass.config.xml), Schlüssel beginnen mit "FluentTheme.".
+
+
+Hinweise
+--------
+- Das Plugin ändert keine Daten in der Datenbank, nur die Darstellung.
+- Wie lange KeePass die Zwischenablage nach dem Kopieren behält,
+  stellt man in KeePass selbst ein: Extras > Optionen > Sicherheit.
+- Bei Problemen: Extras > Fluent-Design > Fehlerbericht kopieren und
+  den Text an Günther Schoder schicken.

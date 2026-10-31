@@ -1,0 +1,18 @@
+# Lokale Sicherungen und Build-Ergebnisse
+Backup/
+Bin/
+Erstellen.log
+Quellcode/VersionInfo.cs
+*.neu.dll
+
+# Niemals hochladen: KeePass-Datenbanken, Schlüsseldateien, Konfiguration
+*.kdbx
+*.kdb
+*.key
+*.keyx
+KeePass.config.xml
+KeePass.config.enforced.xml
+
+# Windows
+Thumbs.db
+desktop.ini
