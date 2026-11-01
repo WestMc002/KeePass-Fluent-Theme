@@ -1,14 +1,17 @@
 # KeePass Fluent Theme - automatische Bereitstellung der FluentTheme.dll
 # Baut das Plugin, sobald sich keepass.version auf main aendert (oder per Hand
 # ueber "Run workflow"), und legt ein Release mit der DLL an.
-# Existiert das Release zur Version schon, passiert nichts.
+# Existiert das Release zur Version schon, wird nichts neu gebaut.
+# Danach werden die Release-Notizen aller Versionen aus den Commit-Texten
+# erzeugt: oben "Aenderungen" (Punkte aus den Commits seit der Vorversion),
+# darunter die Installationsanleitung.
 
 name: Release
 
 on:
   push:
     branches: [main]
-    paths: [keepass.version]
+    paths: [keepass.version, .github/workflows/release.yml]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +24,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Version lesen
         id: ver
@@ -69,11 +74,67 @@ jobs:
         shell: pwsh
         run: |
           $ver = '${{ steps.ver.outputs.ver }}'
-          $notes = @"
+          gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes "..." --target $env:GITHUB_SHA
+          if($LASTEXITCODE -ne 0) { throw 'Release konnte nicht angelegt werden' }
+
+      - name: Release-Notizen aus den Commits erzeugen
+        shell: pwsh
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          git fetch --tags --force --quiet
+          $install = @"
           **Installation:** KeePass beenden, ``FluentTheme.dll`` in den Ordner ``Plugins`` von KeePass kopieren (z. B. ``C:\Program Files (x86)\KeePass\Plugins``) und KeePass starten.
 
           Bei einem Update die vorhandene ``FluentTheme.dll`` einfach ersetzen.
 
           **Installation (English):** close KeePass, copy ``FluentTheme.dll`` into the ``Plugins`` folder of KeePass (e.g. ``C:\Program Files (x86)\KeePass\Plugins``) and start KeePass. To update, simply replace the existing ``FluentTheme.dll``.
           "@
-          gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes $notes --target $env:GITHUB_SHA
+
+          # Punkte aus den Commits eines Bereichs: bei Versions-Commits der Text darunter,
+          # sonst die Betreffzeile; eingerueckte Folgezeilen gehoeren zum Punkt davor
+          function Get-Points([string]$range) {
+            $raw = (git log --reverse --format='%s%x1f%b%x1e' $range) -join "`n"
+            $points = New-Object System.Collections.Generic.List[string]
+            foreach($c in ($raw -split [char]0x1e)) {
+              $c = $c.Trim()
+              if($c.Length -eq 0) { continue }
+              $parts = $c -split [char]0x1f, 2
+              $subj = $parts[0].Trim()
+              $body = (($parts.Count -gt 1) ? $parts[1] : '').Trim()
+              if($subj -eq 'Initial commit') { continue }
+              if($subj -match '^KeePass Fluent Theme v') {
+                if($body.Length -eq 0) {
+                  if($subj -match '\s[\u2013-]\s(.+)$') { $points.Add($Matches[1].Substring(0,1).ToUpper() + $Matches[1].Substring(1)) }
+                  continue
+                }
+                foreach($line in ($body -split "`n")) {
+                  $l = $line.TrimEnd()
+                  if($l -match '^\s*-\s+(.*)$') { $points.Add($Matches[1].Trim()) }
+                  elseif(($l.Trim().Length -gt 0) -and ($points.Count -gt 0)) { $points[$points.Count - 1] += ' ' + $l.Trim() }
+                  elseif($l.Trim().Length -gt 0) { $points.Add($l.Trim()) }
+                }
+              }
+              else { $points.Add($subj) }
+            }
+            return $points
+          }
+
+          $tags = @(git tag --list 'v*' --sort=v:refname)
+          $released = @(gh release list --limit 200 --json tagName --jq '.[].tagName')
+          for($i = 0; $i -lt $tags.Count; $i++) {
+            $tag = $tags[$i]
+            if($released -notcontains $tag) { continue }
+            $range = (($i -eq 0) ? $tag : ($tags[$i - 1] + '..' + $tag))
+            $points = Get-Points $range
+            $text = ''
+            if($points.Count -gt 0) {
+              $text = "**Änderungen**`n`n" + (($points | ForEach-Object { "- $_" }) -join "`n") + "`n`n"
+            }
+            $text += $install
+            $file = Join-Path $env:RUNNER_TEMP "notes-$tag.md"
+            [System.IO.File]::WriteAllText($file, $text, $utf8)
+            gh release edit $tag --notes-file $file
+            if($LASTEXITCODE -ne 0) { throw "Notizen fuer $tag konnten nicht gesetzt werden" }
+            Write-Host "Notizen gesetzt: $tag ($($points.Count) Punkte)"
+          }
