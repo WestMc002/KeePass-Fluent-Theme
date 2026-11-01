@@ -79,6 +79,7 @@ namespace FluentTheme
 		private float m_s = 1f;
 		private Color m_back = Color.Empty;
 		private bool m_hotButton;
+		private bool m_hotClear;
 
 		public SearchBoxPainter(ComboBox cb)
 		{
@@ -94,6 +95,7 @@ namespace FluentTheme
 			cb.MouseLeave += OnMouseLeave;
 			cb.DrawItem += OnDrawItem;
 			cb.EnabledChanged += OnEnabledChanged;
+			cb.TextChanged += OnTextChanged;
 			// Das Umstellen legt das Feld neu an – dabei hängt sich OnHandleCreated schon ein.
 			// Deshalb danach nur einhängen, wenn noch nicht geschehen (sonst Ausnahme).
 			cb.DrawMode = DrawMode.OwnerDrawFixed;
@@ -138,6 +140,7 @@ namespace FluentTheme
 			m_cb.MouseLeave -= OnMouseLeave;
 			m_cb.DrawItem -= OnDrawItem;
 			m_cb.EnabledChanged -= OnEnabledChanged;
+			m_cb.TextChanged -= OnTextChanged;
 			m_cb.DrawMode = DrawMode.Normal;
 			if(this.Handle != IntPtr.Zero) ReleaseHandle();
 			m_cb.Invalidate();
@@ -248,17 +251,56 @@ namespace FluentTheme
 		private void OnMouseMove(object sender, MouseEventArgs e)
 		{
 			bool hot = ButtonRect().Contains(e.Location);
-			if(hot != m_hotButton)
+			bool hotClear = (HasText() && ClearRect().Contains(e.Location));
+			if((hot != m_hotButton) || (hotClear != m_hotClear))
 			{
 				m_hotButton = hot;
+				m_hotClear = hotClear;
 				m_cb.Invalidate();
 			}
+			Cursor want = (hotClear ? Cursors.Hand : Cursors.Default);
+			if(m_cb.Cursor != want) m_cb.Cursor = want;
 		}
 
 		private void OnMouseLeave(object sender, EventArgs e)
 		{
-			if(!m_hotButton) return;
+			if(!m_hotButton && !m_hotClear) return;
 			m_hotButton = false;
+			m_hotClear = false;
+			m_cb.Cursor = Cursors.Default;
+			m_cb.Invalidate();
+		}
+
+		/// <summary>Das „x“ zum Leeren nur zeigen, wenn etwas im Feld steht.</summary>
+		private void OnTextChanged(object sender, EventArgs e)
+		{
+			if(!HasText() && m_hotClear) { m_hotClear = false; m_cb.Cursor = Cursors.Default; }
+			m_cb.Invalidate();
+		}
+
+		private bool HasText()
+		{
+			return !string.IsNullOrEmpty(m_cb.Text);
+		}
+
+		/// <summary>Platz für das „x“ zwischen Textfeld und Pfeil.</summary>
+		private int ClearWidth { get { return D(26); } }
+
+		private Rectangle ClearRect()
+		{
+			Rectangle rb = ButtonRect();
+			if(rb.IsEmpty) return Rectangle.Empty;
+			Rectangle cr = m_cb.ClientRectangle;
+			return Rectangle.FromLTRB(rb.Left - this.ClearWidth, cr.Top + D(3), rb.Left, cr.Bottom - D(3));
+		}
+
+		/// <summary>Suchfeld leeren und den Cursor wieder hineinsetzen.</summary>
+		private void ClearText()
+		{
+			m_cb.Text = string.Empty;
+			m_hotClear = false;
+			m_cb.Cursor = Cursors.Default;
+			m_cb.Focus();
 			m_cb.Invalidate();
 		}
 
@@ -295,6 +337,19 @@ namespace FluentTheme
 			// z. B. beim Klick auf einen Eintrag das Speichern-Symbol aus) rechnet WinForms die Höhe
 			// minimal anders – das Feld zuckte dann um 1 px hoch und runter
 			if((m.Msg == WM_WINDOWPOSCHANGING) && (m.LParam != IntPtr.Zero)) PinVertical(m.LParam);
+			// Klick auf das „x“: Feld leeren statt die Liste aufzuklappen
+			if(((m.Msg == WM_LBUTTONDOWN) || (m.Msg == WM_LBUTTONDBLCLK)) && (m_p != null) && HasText())
+			{
+				long lp = m.LParam.ToInt64();
+				Point pt = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
+				if(ClearRect().Contains(pt))
+				{
+					try { ClearText(); }
+					catch(Exception ex) { FluentThemeExt.Report(ex); }
+					m.Result = IntPtr.Zero;
+					return;
+				}
+			}
 			// Bei Größen-/Lageänderungen markiert Windows den ganzen Text im Feld – beim Tippen würde
 			// der nächste Buchstabe dann alles ersetzen. Markierung deshalb sichern und wiederherstellen.
 			bool resize = ((m.Msg == WM_SIZE) || (m.Msg == WM_WINDOWPOSCHANGED));
@@ -334,6 +389,7 @@ namespace FluentTheme
 		}
 
 		private const int WM_SIZE = 0x0005, WM_WINDOWPOSCHANGED = 0x0047, WM_WINDOWPOSCHANGING = 0x0046;
+		private const int WM_LBUTTONDOWN = 0x0201, WM_LBUTTONDBLCLK = 0x0203;
 		private const int SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002;
 
 		[StructLayout(LayoutKind.Sequential)]
@@ -380,11 +436,15 @@ namespace FluentTheme
 				// Höhe auf eine Textzeile begrenzen (das Textfeld schreibt immer oben in sein Fenster)
 				int h = Math.Min(er.Height, m_cb.Font.Height + D(2));
 				int top = (m_cb.ClientSize.Height - h) / 2;
-				if((Math.Abs(top - er.Top) < 1) && (h == er.Height)) return;
+				// rechts Platz für das „x“ lassen (Windows zieht das Textfeld bis an den Pfeil)
+				int w = er.Width;
+				Rectangle rb = ButtonRect();
+				if(!rb.IsEmpty) w = Math.Max(D(40), rb.Left - this.ClearWidth - er.Left);
+				if((Math.Abs(top - er.Top) < 1) && (h == er.Height) && (w == er.Width)) return;
 				const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 				int ss, se;
 				GetSel(ci.hwndItem, out ss, out se);
-				SetWindowPos(ci.hwndItem, IntPtr.Zero, er.Left, top, er.Width, h, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(ci.hwndItem, IntPtr.Zero, er.Left, top, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
 				RestoreSel(ci.hwndItem, ss, se);
 				m_cb.Invalidate();
 			}
@@ -416,6 +476,32 @@ namespace FluentTheme
 					Color cc = (m_hotButton ? m_p.Text : m_p.Sub);
 					Gfx.Chevron(g, hb.Left + hb.Width / 2f, hb.Top + hb.Height / 2f, 7f * m_s, m_cb.DroppedDown,
 						cc, Math.Max(1f, 1.1f * m_s));
+				}
+
+				// „x“ zum Leeren, nur wenn etwas im Feld steht
+				if(HasText())
+				{
+					Rectangle xr = ClearRect();
+					if(!xr.IsEmpty)
+					{
+						if(m_hotClear)
+						{
+							int hs = Math.Min(xr.Width, xr.Height) - D(2);
+							Rectangle hb = new Rectangle(xr.Left + (xr.Width - hs) / 2, xr.Top + (xr.Height - hs) / 2, hs, hs);
+							Gfx.Fill(g, hb, D(4), m_p.CardHover);
+						}
+						float cx = xr.Left + xr.Width / 2f, cy = xr.Top + xr.Height / 2f, u = 4f * m_s;
+						System.Drawing.Drawing2D.SmoothingMode sm = g.SmoothingMode;
+						g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+						using(Pen pen = new Pen(m_hotClear ? m_p.Text : m_p.Sub, Math.Max(1f, 1.2f * m_s)))
+						{
+							pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+							pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+							g.DrawLine(pen, cx - u, cy - u, cx + u, cy + u);
+							g.DrawLine(pen, cx - u, cy + u, cx + u, cy - u);
+						}
+						g.SmoothingMode = sm;
+					}
 				}
 
 				// Fokus: Akzentlinie an der Unterkante (wie Windows-11-Eingabefelder)
