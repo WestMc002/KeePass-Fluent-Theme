@@ -1,18 +1,25 @@
 # KeePass Fluent Theme - automatische Bereitstellung der FluentTheme.dll
-# Baut das Plugin, sobald sich keepass.version auf main aendert (oder per Hand
-# ueber "Run workflow"), und legt ein Release mit der DLL an.
-# Existiert das Release zur Version schon, wird nichts neu gebaut.
-# Danach werden die Release-Notizen aller Versionen aus den Commit-Texten
-# erzeugt: oben "Aenderungen" (Punkte aus den Commits seit der Vorversion),
-# darunter die Installationsanleitung.
+# Ausloeser:
+# - Änderung von keepass.version auf main: Release zur neuen Version bauen und anlegen.
+#   Existiert es schon, wird nichts neu gebaut, nur der Release-Text aufgefrischt.
+# - Änderung dieser Datei auf main: Release-Texte aller vorhandenen Releases auffrischen.
+# - Hand-Start über "Run workflow" (optional mit Version).
+# Release-Text: oben "Änderungen" = Zeilen mit "- " aus dem neuesten Commit, dessen
+# Text die Version nennt (Commit "Fluent Theme <Version> – Änderungen"), darunter die Installation.
 
 name: Release
 
 on:
   push:
     branches: [main]
-    paths: [keepass.version, .github/workflows/release.yml]
+    paths:
+      - keepass.version
+      - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, z. B. 0.67.2026.1101 (leer = aus keepass.version)'
+        required: false
 
 permissions:
   contents: write
@@ -25,116 +32,104 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # ganze Historie, um den Commit zur Version zu finden
 
-      - name: Version lesen
+      - name: Versionen bestimmen
         id: ver
         shell: pwsh
         run: |
-          $line = Get-Content keepass.version | Where-Object { $_ -match '^Fluent Theme:' } | Select-Object -First 1
-          if(-not $line) { throw 'keine Version in keepass.version' }
-          $ver = $line.Split(':')[1].Trim()
-          "ver=$ver" >> $env:GITHUB_OUTPUT
-          gh release view "v$ver" *> $null
-          if($LASTEXITCODE -eq 0) { "exists=1" >> $env:GITHUB_OUTPUT; Write-Host "Release v$ver existiert bereits" }
-          else { "exists=0" >> $env:GITHUB_OUTPUT }
-          exit 0
+          $existing = @(gh release list --limit 200 --json tagName --jq '.[].tagName' | ForEach-Object { $_.TrimStart('v') })
+          $changed = @(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>$null)
+          $v = ''
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $v = '${{ github.event.inputs.version }}'.Trim().TrimStart('v') }
+          if (-not $v -and (('${{ github.event_name }}' -eq 'workflow_dispatch') -or ($changed -contains 'keepass.version'))) {
+            $line = Get-Content keepass.version | Where-Object { $_ -match '^Fluent Theme:' } | Select-Object -First 1
+            if (-not $line) { throw 'keine Version in keepass.version' }
+            $v = $line.Split(':')[1].Trim()
+          }
+          $new = ''
+          if ($v) {
+            if ($v -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "Ungültige Version: $v" }
+            if ($existing -notcontains $v) { $new = $v }
+          }
+          # Ohne Version (nur der Workflow wurde geändert): alle Release-Texte auffrischen
+          $refresh = if ($v) { @($existing | Where-Object { $_ -eq $v }) } else { $existing }
+          "new=$new" >> $env:GITHUB_OUTPUT
+          "refresh=$($refresh -join ' ')" >> $env:GITHUB_OUTPUT
+          Write-Host "Neu: '$new' / Text auffrischen: '$($refresh -join ' ')'"
+
+      - name: Release-Texte erstellen
+        shell: pwsh
+        run: |
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()   # Umlaute aus git richtig lesen
+          New-Item -ItemType Directory -Path 'notes' -Force | Out-Null
+          $all = @('${{ steps.ver.outputs.new }}') + ('${{ steps.ver.outputs.refresh }}' -split ' ') | Where-Object { $_ }
+          foreach ($ver in $all) {
+            # "Änderungen" = Zeilen mit "- " aus dem neuesten Commit, dessen Text die Version nennt
+            $sha = git log --format=%H -F --grep="$ver" -n 1
+            if (-not $sha) { $sha = git rev-parse HEAD }
+            $body = git log -1 --format=%b $sha
+            $items = @($body -split "`r?`n" | Where-Object { $_ -match '^\s*[-*] ' } | ForEach-Object { '- ' + ($_.Trim() -replace '^[-*]\s+', '') })
+            if ($items.Count -eq 0) { $items = @('- siehe Liesmich.txt im Repository') }
+            $lines = @('## Änderungen', '') + $items + @(
+              '',
+              '## Installation',
+              '',
+              '1. `FluentTheme.dll` herunterladen.',
+              '2. KeePass beenden und die DLL in den Ordner `Plugins` von KeePass kopieren, z. B. `C:\Program Files (x86)\KeePass\Plugins`. Bei einem Update die vorhandene `FluentTheme.dll` einfach ersetzen.',
+              '3. KeePass starten. Das Design passt sich automatisch an hell/dunkel und die Windows-Akzentfarbe an; Einstellungen unter Extras › Fluent-Design.',
+              '',
+              'Voraussetzung: KeePass 2.x unter Windows 10 oder 11 (runde Ecken und einige Details nur unter Windows 11). Ausführliche Beschreibung: README und `Liesmich.txt` im Repository.',
+              '',
+              '**Installation (English):** close KeePass, copy `FluentTheme.dll` into the `Plugins` folder of KeePass (e.g. `C:\Program Files (x86)\KeePass\Plugins`) and start KeePass. To update, simply replace the existing `FluentTheme.dll`.'
+            )
+            $lines | Set-Content -Path "notes\$ver.md" -Encoding utf8   # pwsh 7: UTF-8 ohne BOM
+            Write-Host "---- $ver"; Get-Content "notes\$ver.md"
+          }
 
       - name: KeePass installieren (nur als Verweis zum Kompilieren)
-        if: steps.ver.outputs.exists == '0'
+        if: steps.ver.outputs.new != ''
         shell: pwsh
         run: |
           choco install keepass -y --no-progress
           $kp = Get-ChildItem 'C:\Program Files*' -Recurse -Filter KeePass.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if(-not $kp) { throw 'KeePass.exe nicht gefunden' }
+          if (-not $kp) { throw 'KeePass.exe nicht gefunden' }
           "KPEXE=$($kp.FullName)" >> $env:GITHUB_ENV
 
       - name: Kompilieren
-        if: steps.ver.outputs.exists == '0'
+        if: steps.ver.outputs.new != ''
         shell: pwsh
         run: |
-          $ver = '${{ steps.ver.outputs.ver }}'
+          $ver = '${{ steps.ver.outputs.new }}'
           @(
-            "[assembly: System.Reflection.AssemblyVersion(`"$ver`")]"
-            "[assembly: System.Reflection.AssemblyFileVersion(`"$ver`")]"
-            "[assembly: System.Reflection.AssemblyInformationalVersion(`"$ver`")]"
-            "namespace FluentTheme { public static partial class AppInfo { public const string Version = `"$ver`"; } }"
+            "[assembly: System.Reflection.AssemblyVersion(""$ver"")]"
+            "[assembly: System.Reflection.AssemblyFileVersion(""$ver"")]"
+            "[assembly: System.Reflection.AssemblyInformationalVersion(""$ver"")]"
+            "namespace FluentTheme { public static partial class AppInfo { public const string Version = ""$ver""; } }"
           ) | Set-Content Quellcode\VersionInfo.cs -Encoding utf8
           New-Item -ItemType Directory -Force Bin | Out-Null
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (-not (Test-Path $csc)) { $csc = "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe" }
           & $csc /nologo /target:library /optimize+ /codepage:65001 /out:Bin\FluentTheme.dll `
             "/resource:Resources\GS-Logo.png,GS-Logo.png" `
             /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
             "/r:$env:KPEXE" Quellcode\*.cs
-          if($LASTEXITCODE -ne 0) { throw 'Kompilieren fehlgeschlagen' }
+          if ($LASTEXITCODE -ne 0) { throw 'Kompilieren fehlgeschlagen' }
           (Get-Item Bin\FluentTheme.dll).VersionInfo.FileVersion
 
       - name: Release anlegen
-        if: steps.ver.outputs.exists == '0'
+        if: steps.ver.outputs.new != ''
         shell: pwsh
         run: |
-          $ver = '${{ steps.ver.outputs.ver }}'
-          gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes "..." --target $env:GITHUB_SHA
-          if($LASTEXITCODE -ne 0) { throw 'Release konnte nicht angelegt werden' }
+          $ver = '${{ steps.ver.outputs.new }}'
+          gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Release konnte nicht angelegt werden' }
 
-      - name: Release-Notizen aus den Commits erzeugen
+      - name: Release-Texte auffrischen
+        if: steps.ver.outputs.refresh != ''
         shell: pwsh
         run: |
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          git fetch --tags --force --quiet
-          $install = @"
-          **Installation:** KeePass beenden, ``FluentTheme.dll`` in den Ordner ``Plugins`` von KeePass kopieren (z. B. ``C:\Program Files (x86)\KeePass\Plugins``) und KeePass starten.
-
-          Bei einem Update die vorhandene ``FluentTheme.dll`` einfach ersetzen.
-
-          **Installation (English):** close KeePass, copy ``FluentTheme.dll`` into the ``Plugins`` folder of KeePass (e.g. ``C:\Program Files (x86)\KeePass\Plugins``) and start KeePass. To update, simply replace the existing ``FluentTheme.dll``.
-          "@
-
-          # Punkte aus den Commits eines Bereichs: bei Versions-Commits der Text darunter,
-          # sonst die Betreffzeile; eingerueckte Folgezeilen gehoeren zum Punkt davor
-          function Get-Points([string]$range) {
-            $raw = (git log --reverse --format='%s%x1f%b%x1e' $range) -join "`n"
-            $points = New-Object System.Collections.Generic.List[string]
-            foreach($c in ($raw -split [char]0x1e)) {
-              $c = $c.Trim()
-              if($c.Length -eq 0) { continue }
-              $parts = $c -split [char]0x1f, 2
-              $subj = $parts[0].Trim()
-              $body = (($parts.Count -gt 1) ? $parts[1] : '').Trim()
-              if($subj -eq 'Initial commit') { continue }
-              if($subj -match '^KeePass Fluent Theme v') {
-                if($body.Length -eq 0) {
-                  if($subj -match '\s[\u2013-]\s(.+)$') { $points.Add($Matches[1].Substring(0,1).ToUpper() + $Matches[1].Substring(1)) }
-                  continue
-                }
-                foreach($line in ($body -split "`n")) {
-                  $l = $line.TrimEnd()
-                  if($l -match '^\s*-\s+(.*)$') { $points.Add($Matches[1].Trim()) }
-                  elseif(($l.Trim().Length -gt 0) -and ($points.Count -gt 0)) { $points[$points.Count - 1] += ' ' + $l.Trim() }
-                  elseif($l.Trim().Length -gt 0) { $points.Add($l.Trim()) }
-                }
-              }
-              else { $points.Add($subj) }
-            }
-            return $points
-          }
-
-          $tags = @(git tag --list 'v*' --sort=v:refname)
-          $released = @(gh release list --limit 200 --json tagName --jq '.[].tagName')
-          for($i = 0; $i -lt $tags.Count; $i++) {
-            $tag = $tags[$i]
-            if($released -notcontains $tag) { continue }
-            $range = (($i -eq 0) ? $tag : ($tags[$i - 1] + '..' + $tag))
-            $points = Get-Points $range
-            $text = ''
-            if($points.Count -gt 0) {
-              $text = "**Änderungen**`n`n" + (($points | ForEach-Object { "- $_" }) -join "`n") + "`n`n"
-            }
-            $text += $install
-            $file = Join-Path $env:RUNNER_TEMP "notes-$tag.md"
-            [System.IO.File]::WriteAllText($file, $text, $utf8)
-            gh release edit $tag --notes-file $file
-            if($LASTEXITCODE -ne 0) { throw "Notizen fuer $tag konnten nicht gesetzt werden" }
-            Write-Host "Notizen gesetzt: $tag ($($points.Count) Punkte)"
+          foreach ($ver in ('${{ steps.ver.outputs.refresh }}' -split ' ' | Where-Object { $_ })) {
+            gh release edit "v$ver" --notes-file "notes\$ver.md"
+            if ($LASTEXITCODE -ne 0) { throw "Release-Text v$ver konnte nicht aktualisiert werden" }
           }
