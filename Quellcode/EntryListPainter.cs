@@ -135,10 +135,11 @@ namespace FluentTheme
 
 			if(m_lv.IsHandleCreated)
 			{
-				// Hell: Standard-Design ohne Explorer-Hover-Animation (verursacht Flackern),
-				// dunkel: DarkMode_Explorer für dunkle Scrollleisten. Die senkrechten Spaltenlinien,
-				// die dieses Design unter den Einträgen zeichnet, übermalt EmptyAreaPainter.
-				NativeMethods.ThemeControl(m_lv, p.Dark, "DarkMode_Explorer", null);
+				// Ohne Windows-Design: Die Liste zeichnen wir komplett selbst. Jedes Windows-Design
+				// legt sonst eigene Effekte darüber – beim Überfahren eine Hover-Animation, die in der
+				// Gruppenansicht (Suchergebnisse) Zeilen kurz leer zeigt und flackert, im Dunkelmodus
+				// eine eckige Auswahl. Die senkrechte Scrollleiste ersetzt OverlayScroll ohnehin.
+				NativeMethods.ThemeControl(m_lv, p.Dark, " ", " ");
 				IntPtr hdr = NativeMethods.GetListHeader(m_lv);
 				NativeMethods.ThemeHandle(hdr, p.Dark, "DarkMode_ItemsView", "ItemsView");
 				NativeMethods.ListDoubleBuffer(m_lv);
@@ -255,10 +256,12 @@ namespace FluentTheme
 
 		private void OnDrawItem(object sender, DrawListViewItemEventArgs e)
 		{
-			// In der Detailansicht zeichnet OnDrawSubItem (Spalte 0) die ganze Zeile – erst dort,
-			// weil das dunkle Windows-Design nach diesem Schritt noch seine eigene, eckige
-			// Auswahl über die Zeile legt.
-			if((m_p == null) || (m_lv.View != View.Details)) e.DrawDefault = true;
+			// Die Zeile wird zweimal gezeichnet: hier und noch einmal in OnDrawSubItem (Spalte 0).
+			// Nur hier reicht nicht – das dunkle Windows-Design legt danach eine eckige Auswahl
+			// darüber. Nur dort reicht nicht – in der Gruppenansicht (Suchergebnisse) zeichnet
+			// Windows beim Überfahren manchmal nur diesen Schritt neu, die Zeile bliebe leer.
+			if((m_p == null) || (m_lv.View != View.Details)) { e.DrawDefault = true; return; }
+			if(!PaintRow(e.Graphics, e.Item, e.ItemIndex)) e.DrawDefault = true;
 		}
 
 		private void OnDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
@@ -565,10 +568,105 @@ namespace FluentTheme
 
 			protected override void WndProc(ref Message m)
 			{
+				// Gruppenüberschriften (Suchergebnisse) selbst zeichnen
+				if((m.Msg == WM_REFLECT_NOTIFY) && (m.LParam != IntPtr.Zero))
+				{
+					try { if(DrawGroupHeader(ref m)) return; }
+					catch(Exception ex) { FluentThemeExt.Report(ex); }
+				}
 				base.WndProc(ref m);
 				if(m.Msg != WM_PAINT) return;
 				try { Paint(); }
 				catch(Exception ex) { FluentThemeExt.Report(ex); }
+			}
+
+			private const int WM_REFLECT_NOTIFY = 0x204E; // von WinForms an die Liste zurückgereichtes WM_NOTIFY
+			private const int NM_CUSTOMDRAW = -12;
+			private const int CDDS_PREPAINT = 0x0001;
+			private const int CDRF_SKIPDEFAULT = 0x0004;
+			private const int LVCDI_GROUP = 0x0001;
+			private const int LVM_GETGROUPRECT = 0x1062;
+			private const int LVGGR_HEADER = 1;
+
+			[StructLayout(LayoutKind.Sequential)]
+			private struct NMHDR
+			{
+				public IntPtr hwndFrom;
+				public UIntPtr idFrom;
+				public int code;
+			}
+
+			[StructLayout(LayoutKind.Sequential)]
+			private struct NMCUSTOMDRAW
+			{
+				public NMHDR hdr;
+				public int dwDrawStage;
+				public IntPtr hdc;
+				public RECT rc;
+				public UIntPtr dwItemSpec;
+				public uint uItemState;
+				public IntPtr lItemlParam;
+			}
+
+			[StructLayout(LayoutKind.Sequential)]
+			private struct NMLVCUSTOMDRAW
+			{
+				public NMCUSTOMDRAW nmcd;
+				public int clrText;
+				public int clrTextBk;
+				public int iSubItem;
+				public int dwItemType;
+			}
+
+			private static PropertyInfo s_groupId;
+
+			/// <summary>Überschrift einer Gruppe (z. B. „Privat → Internet“) im Stil der Spaltenköpfe:
+			/// grau, halbfett, ohne Linie. Statt des Windows-Blaus, das im Dunkelmodus kaum lesbar ist.</summary>
+			private bool DrawGroupHeader(ref Message m)
+			{
+				Palette p = m_owner.m_p;
+				if((p == null) || !m_owner.m_attached) return false;
+				NMHDR hdr = (NMHDR)Marshal.PtrToStructure(m.LParam, typeof(NMHDR));
+				if(hdr.code != NM_CUSTOMDRAW) return false;
+				NMLVCUSTOMDRAW cd = (NMLVCUSTOMDRAW)Marshal.PtrToStructure(m.LParam, typeof(NMLVCUSTOMDRAW));
+				if((cd.nmcd.dwDrawStage != CDDS_PREPAINT) || (cd.dwItemType != LVCDI_GROUP)) return false;
+
+				ListView lv = m_owner.m_lv;
+				int id = (int)cd.nmcd.dwItemSpec.ToUInt32();
+				RECT r = new RECT();
+				r.Top = LVGGR_HEADER;
+				if(SendRect(lv.Handle, LVM_GETGROUPRECT, new IntPtr(id), ref r) == IntPtr.Zero) return false;
+				Rectangle rc = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+				if((rc.Width <= 0) || (rc.Height <= 0) || (cd.nmcd.hdc == IntPtr.Zero)) return false;
+
+				string text = GroupText(lv, id);
+				using(Graphics g = Graphics.FromHdc(cd.nmcd.hdc))
+				{
+					using(SolidBrush b = new SolidBrush(p.Pane)) { g.FillRectangle(b, rc); }
+					Font f;
+					try { f = new Font("Segoe UI Semibold", lv.Font.SizeInPoints); }
+					catch(ArgumentException) { f = new Font(lv.Font, FontStyle.Bold); }
+					using(f)
+					{
+						Rectangle tr = Rectangle.FromLTRB(rc.Left + m_owner.D(10), rc.Top, rc.Right - m_owner.D(10), rc.Bottom);
+						TextRenderer.DrawText(g, text, f, tr, p.Sub, TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+							TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+					}
+				}
+				m.Result = new IntPtr(CDRF_SKIPDEFAULT);
+				return true;
+			}
+
+			/// <summary>Text der Gruppe mit der Windows-ID (WinForms führt die ID intern).</summary>
+			private static string GroupText(ListView lv, int id)
+			{
+				if(s_groupId == null)
+					s_groupId = typeof(ListViewGroup).GetProperty("ID", BindingFlags.Instance | BindingFlags.NonPublic);
+				foreach(ListViewGroup grp in lv.Groups)
+				{
+					if((s_groupId != null) && (Convert.ToInt32(s_groupId.GetValue(grp, null)) == id)) return grp.Header;
+				}
+				return string.Empty;
 			}
 
 			private void Paint()
@@ -581,8 +679,18 @@ namespace FluentTheme
 				IntPtr hdr = NativeMethods.GetListHeader(lv);
 				RECT hr;
 				if((hdr != IntPtr.Zero) && GetWindowRect(hdr, out hr)) top = Math.Max(0, hr.Bottom - hr.Top);
+				// Unterkante des untersten Eintrags. In der Gruppenansicht (Suchergebnisse) ist der
+				// letzte Eintrag der Liste nicht der unterste auf dem Bildschirm – dort alle prüfen,
+				// sonst würden weitere Gruppen übermalt. Gruppenüberschriften liegen über ihren Einträgen.
 				int n = lv.Items.Count;
-				if(n > 0) top = Math.Max(top, lv.GetItemRect(n - 1).Bottom);
+				if(n > 0)
+				{
+					if(lv.ShowGroups && (lv.Groups.Count > 0))
+					{
+						for(int i = 0; i < n; ++i) top = Math.Max(top, lv.GetItemRect(i).Bottom);
+					}
+					else top = Math.Max(top, lv.GetItemRect(n - 1).Bottom);
+				}
 
 				Size cs = lv.ClientSize;
 				if(top >= cs.Height) return;

@@ -460,6 +460,10 @@ namespace FluentTheme
 							// ungespeicherte Änderungen gibt - das nachbilden (farbig / grau)
 							m_saveItem = it;
 							m_saveOff = ToolStripRenderer.CreateDisabledImage(gen);
+							// KeePass setzt das Bild bei jedem Klick auf einen Eintrag neu (aus zwei
+							// eigenen Feldern). Dort unsere Bilder hinterlegen, sonst blitzt kurz das
+							// KeePass-Symbol auf, bis die Zeitschaltung es wieder ersetzt.
+							SetKeePassSaveImages(gen, m_saveOff);
 						}
 						it.Image = DesiredImage(it, gen);
 						it.ImageScaling = ToolStripItemImageScaling.None;
@@ -467,6 +471,7 @@ namespace FluentTheme
 					else
 					{
 						m_genImages.Remove(it);
+						if(kind == "save") RestoreKeePassSaveImages();
 						it.Image = m_origImages[it];
 						it.ImageScaling = ToolStripItemImageScaling.SizeToFit;
 					}
@@ -479,6 +484,22 @@ namespace FluentTheme
 			}
 			finally { tb.ResumeLayout(); }
 
+			// Breite der Knöpfe festhalten (auch mit den KeePass-Symbolen): KeePass tauscht beim Klick auf
+			// einen Eintrag das Speichern-Symbol aus, kurz wird der Knopf schmaler – die Leiste samt
+			// Suchfeld sprang dann hin und her
+			try
+			{
+				foreach(ToolStripItem it in tb.Items)
+				{
+					if((it is ToolStripSeparator) || (it is ToolStripControlHost)) continue;
+					if(IconFactory.KindFor(it.Name) == null) continue;
+					it.AutoSize = true;
+					Size sz = it.GetPreferredSize(Size.Empty);
+					it.AutoSize = false;
+					it.Size = sz;
+				}
+			}
+			catch(Exception ex) { Report(ex); }
 		}
 
 		/// <summary>Datenbank-Tabs: größere Schrift, aktiver Tab blau hinterlegt.</summary>
@@ -519,7 +540,9 @@ namespace FluentTheme
 				ToolStripComboBox cb = (it as ToolStripComboBox);
 				if(cb != null)
 				{
-					cb.FlatStyle = FlatStyle.Flat;
+					// Nicht „Flat“: Damit zeichnet WinForms Rahmen und Pfeil bei jedem Fokuswechsel selbst
+					// über das Feld (Flackern, doppelter Pfeil). Gezeichnet wird alles vom SearchBoxPainter.
+					if(cb.FlatStyle != FlatStyle.Standard) cb.FlatStyle = FlatStyle.Standard;
 					cb.BackColor = m_p.Card;
 					cb.ForeColor = m_p.Text;
 					// Suchfeld breiter (Höhe bleibt, damit die Symbolleiste nicht wächst)
@@ -667,6 +690,53 @@ namespace FluentTheme
 				}
 				if((m_details != null) && m_details.Visible) m_details.RefreshIfChanged(false);
 				UpdateCardHeaders();
+			}
+			catch(Exception ex) { Report(ex); }
+		}
+
+		private Image m_kpSaveOn, m_kpSaveOff;   // ursprüngliche Speichern-Bilder von KeePass
+		private bool m_kpSaveSaved;
+
+		private System.Reflection.FieldInfo KpField(string name)
+		{
+			return typeof(MainForm).GetField(name, System.Reflection.BindingFlags.Instance |
+				System.Reflection.BindingFlags.NonPublic);
+		}
+
+		/// <summary>Die Bilder, die KeePass für „geändert“ und „nicht geändert“ verwendet, durch
+		/// unsere ersetzen (private Felder des Hauptfensters).</summary>
+		private void SetKeePassSaveImages(Image on, Image off)
+		{
+			try
+			{
+				MainForm mf = m_host.MainWindow;
+				System.Reflection.FieldInfo fOn = KpField("m_imgFileSaveEnabled");
+				System.Reflection.FieldInfo fOff = KpField("m_imgFileSaveDisabled");
+				if((mf == null) || (fOn == null) || (fOff == null)) return;
+				if(!m_kpSaveSaved)
+				{
+					m_kpSaveOn = (fOn.GetValue(mf) as Image);
+					m_kpSaveOff = (fOff.GetValue(mf) as Image);
+					m_kpSaveSaved = true;
+				}
+				fOn.SetValue(mf, on);
+				fOff.SetValue(mf, off);
+			}
+			catch(Exception ex) { Report(ex); }
+		}
+
+		private void RestoreKeePassSaveImages()
+		{
+			if(!m_kpSaveSaved) return;
+			try
+			{
+				MainForm mf = m_host.MainWindow;
+				System.Reflection.FieldInfo fOn = KpField("m_imgFileSaveEnabled");
+				System.Reflection.FieldInfo fOff = KpField("m_imgFileSaveDisabled");
+				if((mf == null) || (fOn == null) || (fOff == null)) return;
+				fOn.SetValue(mf, m_kpSaveOn);
+				fOff.SetValue(mf, m_kpSaveOff);
+				m_kpSaveSaved = false;
 			}
 			catch(Exception ex) { Report(ex); }
 		}
@@ -1058,7 +1128,8 @@ namespace FluentTheme
 				foreach(ToolStripMenuItem mi in expiryItems) mi.Checked = ((int)mi.Tag == ed);
 				miIcons.Checked = this.ModernIcons;
 				miVersion.Checked = this.ShowVersion;
-				miErr.Enabled = (!string.IsNullOrEmpty(s_lastError) || (s_toolbarInfo.Length > 0));
+				miErr.Enabled = (!string.IsNullOrEmpty(s_lastError) || (s_toolbarInfo.Length > 0) ||
+					(MenuStyler.MoveInfo.Length > 0));
 			};
 
 			return root;

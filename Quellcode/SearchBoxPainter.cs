@@ -98,6 +98,7 @@ namespace FluentTheme
 			// Deshalb danach nur einhängen, wenn noch nicht geschehen (sonst Ausnahme).
 			cb.DrawMode = DrawMode.OwnerDrawFixed;
 			if(cb.IsHandleCreated && (this.Handle == IntPtr.Zero)) AssignHandle(cb.Handle);
+			NoTheme();
 		}
 
 		private int D(int v)
@@ -145,7 +146,18 @@ namespace FluentTheme
 		private void OnHandleCreated(object sender, EventArgs e)
 		{
 			if(this.Handle == IntPtr.Zero) AssignHandle(m_cb.Handle);
+			NoTheme();
 			CenterEdit();
+		}
+
+		/// <summary>Windows-Design für das Feld abschalten: Mit Design zeichnet Windows bei Fokus-
+		/// und Maus-Wechseln eine kurze Übergangs-Animation von Rahmen und Pfeil direkt aufs Feld
+		/// (an unserem Zeichnen vorbei) – das Suchfeld flackert dann. Gezeichnet wird alles hier.</summary>
+		private void NoTheme()
+		{
+			if(!m_cb.IsHandleCreated) return;
+			try { NativeMethods.ThemeHandle(m_cb.Handle, false, " ", " "); }
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 
 		private void OnHandleDestroyed(object sender, EventArgs e)
@@ -279,12 +291,79 @@ namespace FluentTheme
 					return;
 				}
 			}
+			// Senkrechte Lage selbst festlegen: Bei jedem Neuanordnen der Symbolleiste (KeePass tauscht
+			// z. B. beim Klick auf einen Eintrag das Speichern-Symbol aus) rechnet WinForms die Höhe
+			// minimal anders – das Feld zuckte dann um 1 px hoch und runter
+			if((m.Msg == WM_WINDOWPOSCHANGING) && (m.LParam != IntPtr.Zero)) PinVertical(m.LParam);
+			// Bei Größen-/Lageänderungen markiert Windows den ganzen Text im Feld – beim Tippen würde
+			// der nächste Buchstabe dann alles ersetzen. Markierung deshalb sichern und wiederherstellen.
+			bool resize = ((m.Msg == WM_SIZE) || (m.Msg == WM_WINDOWPOSCHANGED));
+			IntPtr edit = (resize ? EditHandle() : IntPtr.Zero);
+			int selStart = 0, selEnd = 0;
+			bool keep = ((edit != IntPtr.Zero) && m_cb.ContainsFocus && GetSel(edit, out selStart, out selEnd));
 			base.WndProc(ref m);
 			// Windows setzt das Textfeld bei jeder Größenänderung oben an – danach wieder mittig setzen
-			if((m_p != null) && ((m.Msg == WM_SIZE) || (m.Msg == WM_WINDOWPOSCHANGED))) CenterEdit();
+			if((m_p != null) && resize) CenterEdit();
+			if(keep) RestoreSel(edit, selStart, selEnd);
 		}
 
-		private const int WM_SIZE = 0x0005, WM_WINDOWPOSCHANGED = 0x0047;
+		private const int EM_GETSEL = 0x00B0, EM_SETSEL = 0x00B1;
+
+		private IntPtr EditHandle()
+		{
+			if(!m_cb.IsHandleCreated) return IntPtr.Zero;
+			COMBOBOXINFO ci = new COMBOBOXINFO();
+			ci.cbSize = Marshal.SizeOf(typeof(COMBOBOXINFO));
+			return (GetComboBoxInfo(m_cb.Handle, ref ci) ? ci.hwndItem : IntPtr.Zero);
+		}
+
+		private static bool GetSel(IntPtr edit, out int start, out int end)
+		{
+			long r = SendMessage(edit, EM_GETSEL, IntPtr.Zero, IntPtr.Zero).ToInt64();
+			start = (int)(r & 0xFFFF);
+			end = (int)((r >> 16) & 0xFFFF);
+			return true;
+		}
+
+		private static void RestoreSel(IntPtr edit, int start, int end)
+		{
+			int s2, e2;
+			GetSel(edit, out s2, out e2);
+			if((s2 != start) || (e2 != end))
+				SendMessage(edit, EM_SETSEL, new IntPtr(start), new IntPtr(end));
+		}
+
+		private const int WM_SIZE = 0x0005, WM_WINDOWPOSCHANGED = 0x0047, WM_WINDOWPOSCHANGING = 0x0046;
+		private const int SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002;
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct WINDOWPOS
+		{
+			public IntPtr hwnd;
+			public IntPtr hwndInsertAfter;
+			public int x, y, cx, cy;
+			public int flags;
+		}
+
+		/// <summary>Feld immer senkrecht mittig in der Symbolleiste halten.</summary>
+		private void PinVertical(IntPtr lParam)
+		{
+			try
+			{
+				ToolStrip ts = (m_cb.Parent as ToolStrip);
+				if(ts == null) return;
+				WINDOWPOS wp = (WINDOWPOS)Marshal.PtrToStructure(lParam, typeof(WINDOWPOS));
+				if((wp.flags & SWP_NOMOVE) != 0) return;
+				int h = (((wp.flags & SWP_NOSIZE) != 0) ? m_cb.Height : wp.cy);
+				int area = ts.DisplayRectangle.Height;
+				if((h <= 0) || (area <= 0) || (h > area)) return;
+				int y = ts.DisplayRectangle.Top + (area - h) / 2;
+				if(wp.y == y) return;
+				wp.y = y;
+				Marshal.StructureToPtr(wp, lParam, false);
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
 
 		/// <summary>Textfeld (eigenes Fenster im Suchfeld) senkrecht mittig setzen, damit die Schrift
 		/// nicht oben klebt.</summary>
@@ -303,7 +382,10 @@ namespace FluentTheme
 				int top = (m_cb.ClientSize.Height - h) / 2;
 				if((Math.Abs(top - er.Top) < 1) && (h == er.Height)) return;
 				const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+				int ss, se;
+				GetSel(ci.hwndItem, out ss, out se);
 				SetWindowPos(ci.hwndItem, IntPtr.Zero, er.Left, top, er.Width, h, SWP_NOZORDER | SWP_NOACTIVATE);
+				RestoreSel(ci.hwndItem, ss, se);
 				m_cb.Invalidate();
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
