@@ -117,7 +117,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Kompilieren von v$ver fehlgeschlagen" }
             (Get-Item "$out\FluentTheme.dll").VersionInfo.FileVersion
             gh release create "v$ver" "$out\FluentTheme.dll" --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $sha
-            if ($LASTEXITCODE -ne 0) { throw "Release v$ver konnte nicht angelegt werden" }
+            if ($LASTEXITCODE -ne 0) {
+              # Ältere Stände enthalten eine frühere Fassung dieses Workflows; dort darf das
+              # Actions-Token keinen Tag anlegen (HTTP 403). Dann den Tag auf den aktuellen
+              # Stand setzen - die DLL bleibt die aus dem Stand dieser Version.
+              Write-Host "Tag auf $sha nicht erlaubt - Tag auf aktuellen Stand"
+              gh release create "v$ver" "$out\FluentTheme.dll" --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $env:GITHUB_SHA
+              if ($LASTEXITCODE -ne 0) { throw "Release v$ver konnte nicht angelegt werden" }
+            }
           }
 
       - name: Release-Texte auffrischen
