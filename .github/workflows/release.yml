@@ -1,11 +1,11 @@
 # KeePass Fluent Theme - automatische Bereitstellung der FluentTheme.dll
-# Ausloeser:
-# - Änderung von keepass.version auf main: Release zur neuen Version bauen und anlegen.
-#   Existiert es schon, wird nichts neu gebaut, nur der Release-Text aufgefrischt.
-# - Änderung dieser Datei auf main: Release-Texte aller vorhandenen Releases auffrischen.
-# - Hand-Start über "Run workflow" (optional mit Version).
+# Bei jedem Lauf:
+# - Für jede Version aus der Geschichte von keepass.version, zu der es noch kein Release
+#   gibt, wird die DLL aus genau diesem Stand gebaut und das Release angelegt (älteste zuerst).
+# - Die Release-Texte aller vorhandenen Releases werden aufgefrischt.
+# Ausloeser: Änderung von keepass.version oder dieser Datei auf main, Hand-Start über "Run workflow".
 # Release-Text: oben "Änderungen" = Zeilen mit "- " aus dem neuesten Commit, dessen
-# Text die Version nennt (Commit "Fluent Theme <Version> – Änderungen"), darunter die Installation.
+# Text die Version nennt (Commit "KeePass Fluent Theme <Version> – Änderungen"), darunter die Installation.
 
 name: Release
 
@@ -16,10 +16,6 @@ on:
       - keepass.version
       - '.github/workflows/release.yml'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version, z. B. 0.67.2026.1101 (leer = aus keepass.version)'
-        required: false
 
 permissions:
   contents: write
@@ -32,38 +28,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # ganze Historie, um den Commit zur Version zu finden
+          fetch-depth: 0   # ganze Historie: Versionen und Commits zur Version finden
 
       - name: Versionen bestimmen
         id: ver
         shell: pwsh
         run: |
           $existing = @(gh release list --limit 200 --json tagName --jq '.[].tagName' | ForEach-Object { $_.TrimStart('v') })
-          $changed = @(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>$null)
-          $v = ''
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $v = '${{ github.event.inputs.version }}'.Trim().TrimStart('v') }
-          if (-not $v -and (('${{ github.event_name }}' -eq 'workflow_dispatch') -or ($changed -contains 'keepass.version'))) {
-            $line = Get-Content keepass.version | Where-Object { $_ -match '^Fluent Theme:' } | Select-Object -First 1
-            if (-not $line) { throw 'keine Version in keepass.version' }
+          # Versionen aus der Geschichte von keepass.version (jeweils der erste Commit mit dieser Version)
+          $build = New-Object System.Collections.Generic.List[string]
+          $seen = @{}
+          foreach ($sha in @(git log --format=%H --reverse -- keepass.version)) {
+            $line = git show "${sha}:keepass.version" | Where-Object { $_ -match '^Fluent Theme:' } | Select-Object -First 1
+            if (-not $line) { continue }
             $v = $line.Split(':')[1].Trim()
+            if (($v -notmatch '^\d+\.\d+\.\d+\.\d+$') -or $seen.ContainsKey($v)) { continue }
+            $seen[$v] = $true
+            if ($existing -notcontains $v) { $build.Add("$v=$sha") }
           }
-          $new = ''
-          if ($v) {
-            if ($v -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "Ungültige Version: $v" }
-            if ($existing -notcontains $v) { $new = $v }
-          }
-          # Ohne Version (nur der Workflow wurde geändert): alle Release-Texte auffrischen
-          $refresh = if ($v) { @($existing | Where-Object { $_ -eq $v }) } else { $existing }
-          "new=$new" >> $env:GITHUB_OUTPUT
-          "refresh=$($refresh -join ' ')" >> $env:GITHUB_OUTPUT
-          Write-Host "Neu: '$new' / Text auffrischen: '$($refresh -join ' ')'"
+          "build=$($build -join ' ')" >> $env:GITHUB_OUTPUT
+          "refresh=$($existing -join ' ')" >> $env:GITHUB_OUTPUT
+          Write-Host "Neu bauen: '$($build -join ' ')' / Text auffrischen: '$($existing -join ' ')'"
 
       - name: Release-Texte erstellen
         shell: pwsh
         run: |
           [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()   # Umlaute aus git richtig lesen
           New-Item -ItemType Directory -Path 'notes' -Force | Out-Null
-          $all = @('${{ steps.ver.outputs.new }}') + ('${{ steps.ver.outputs.refresh }}' -split ' ') | Where-Object { $_ }
+          $all = @('${{ steps.ver.outputs.build }}' -split ' ' | Where-Object { $_ } | ForEach-Object { $_.Split('=')[0] }) +
+            @('${{ steps.ver.outputs.refresh }}' -split ' ' | Where-Object { $_ })
           foreach ($ver in $all) {
             # "Änderungen" = Zeilen mit "- " aus dem neuesten Commit, dessen Text die Version nennt
             $sha = git log --format=%H -F --grep="$ver" -n 1
@@ -88,7 +81,7 @@ jobs:
           }
 
       - name: KeePass installieren (nur als Verweis zum Kompilieren)
-        if: steps.ver.outputs.new != ''
+        if: steps.ver.outputs.build != ''
         shell: pwsh
         run: |
           choco install keepass -y --no-progress
@@ -96,34 +89,36 @@ jobs:
           if (-not $kp) { throw 'KeePass.exe nicht gefunden' }
           "KPEXE=$($kp.FullName)" >> $env:GITHUB_ENV
 
-      - name: Kompilieren
-        if: steps.ver.outputs.new != ''
+      - name: Fehlende Releases bauen und anlegen
+        if: steps.ver.outputs.build != ''
         shell: pwsh
         run: |
-          $ver = '${{ steps.ver.outputs.new }}'
-          @(
-            "[assembly: System.Reflection.AssemblyVersion(""$ver"")]"
-            "[assembly: System.Reflection.AssemblyFileVersion(""$ver"")]"
-            "[assembly: System.Reflection.AssemblyInformationalVersion(""$ver"")]"
-            "namespace FluentTheme { public static partial class AppInfo { public const string Version = ""$ver""; } }"
-          ) | Set-Content Quellcode\VersionInfo.cs -Encoding utf8
-          New-Item -ItemType Directory -Force Bin | Out-Null
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           if (-not (Test-Path $csc)) { $csc = "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe" }
-          & $csc /nologo /target:library /optimize+ /codepage:65001 /out:Bin\FluentTheme.dll `
-            "/resource:Resources\GS-Logo.png,GS-Logo.png" `
-            /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
-            "/r:$env:KPEXE" Quellcode\*.cs
-          if ($LASTEXITCODE -ne 0) { throw 'Kompilieren fehlgeschlagen' }
-          (Get-Item Bin\FluentTheme.dll).VersionInfo.FileVersion
-
-      - name: Release anlegen
-        if: steps.ver.outputs.new != ''
-        shell: pwsh
-        run: |
-          $ver = '${{ steps.ver.outputs.new }}'
-          gh release create "v$ver" Bin\FluentTheme.dll --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Release konnte nicht angelegt werden' }
+          foreach ($pair in ('${{ steps.ver.outputs.build }}' -split ' ' | Where-Object { $_ })) {
+            $ver, $sha = $pair.Split('=')
+            Write-Host "==== v$ver aus $sha"
+            # Stand dieser Version in einem eigenen Ordner auschecken
+            $wt = Join-Path $env:RUNNER_TEMP "src-$ver"
+            git worktree add --detach $wt $sha
+            if ($LASTEXITCODE -ne 0) { throw "Stand $sha nicht auscheckbar" }
+            @(
+              "[assembly: System.Reflection.AssemblyVersion(""$ver"")]"
+              "[assembly: System.Reflection.AssemblyFileVersion(""$ver"")]"
+              "[assembly: System.Reflection.AssemblyInformationalVersion(""$ver"")]"
+              "namespace FluentTheme { public static partial class AppInfo { public const string Version = ""$ver""; } }"
+            ) | Set-Content "$wt\Quellcode\VersionInfo.cs" -Encoding utf8
+            $out = Join-Path $env:RUNNER_TEMP "out-$ver"
+            New-Item -ItemType Directory -Force $out | Out-Null
+            & $csc /nologo /target:library /optimize+ /codepage:65001 "/out:$out\FluentTheme.dll" `
+              "/resource:$wt\Resources\GS-Logo.png,GS-Logo.png" `
+              /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
+              "/r:$env:KPEXE" "$wt\Quellcode\*.cs"
+            if ($LASTEXITCODE -ne 0) { throw "Kompilieren von v$ver fehlgeschlagen" }
+            (Get-Item "$out\FluentTheme.dll").VersionInfo.FileVersion
+            gh release create "v$ver" "$out\FluentTheme.dll" --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $sha
+            if ($LASTEXITCODE -ne 0) { throw "Release v$ver konnte nicht angelegt werden" }
+          }
 
       - name: Release-Texte auffrischen
         if: steps.ver.outputs.refresh != ''
