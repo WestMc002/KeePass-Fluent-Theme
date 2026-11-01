@@ -6,7 +6,7 @@ ECHO #                                     #
 ECHO #  Autor: Guenther Schoder            #
 ECHO #         www.westmc002.de            #
 ECHO #                                     #
-ECHO #  Datum: 29.10.2026 / 30.10.2026     #
+ECHO #  Datum: 29.10.2026 / 01.11.2026     #
 ECHO #######################################
 ECHO.
 
@@ -18,7 +18,7 @@ REM MAJOR     = Hauptversion
 REM NAME      = Programmname = Name der DLL ohne .dll (auch Backup-Ordner)
 REM NAMESPACE = C#-Namespace, in dem die Klasse AppInfo liegt
 REM SRCDIR    = Ordner mit allen .cs-Dateien (VersionInfo.cs wird dort erzeugt)
-REM RESDIR    = Ordner mit GS-Logo.png
+REM RESDIR    = Ordner mit GS-Logo.png und FluentTheme.ico (Icon des Plugins)
 REM KPDIR     = KeePass-Programmordner
 REM EXTRAREFS = zusaetzliche Verweise (hier KeePass.exe)
 REM Abweichung von der Vorlage: Plugin-DLL in Bin statt EXE, kein Icon,
@@ -73,7 +73,7 @@ REM Kompilieren (zuerst in eine neue Datei, die alte DLL bleibt bei Fehlern erha
 IF NOT EXIST "Bin" MKDIR "Bin"
 IF EXIST "%NEWDLL%" DEL /F /Q "%NEWDLL%"
 ECHO Kompiliere %DLL% ...
-"%CSC%" /nologo /target:library /optimize+ /codepage:65001 "/out:%NEWDLL%" "/resource:%RESDIR%\GS-Logo.png,GS-Logo.png" /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll %EXTRAREFS% "%SRCDIR%\*.cs" > Erstellen.log 2>&1
+"%CSC%" /nologo /target:library /optimize+ /codepage:65001 "/out:%NEWDLL%" "/resource:%RESDIR%\GS-Logo.png,GS-Logo.png" "/resource:%RESDIR%\FluentTheme.ico,FluentTheme.ico" /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll %EXTRAREFS% "%SRCDIR%\*.cs" > Erstellen.log 2>&1
 SET "RESULT=%ERRORLEVEL%"
 TYPE Erstellen.log
 IF NOT "%RESULT%"=="0" GOTO :ERR_BUILD

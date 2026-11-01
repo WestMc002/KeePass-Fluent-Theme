@@ -151,7 +151,7 @@ Screenshots show the German interface with a demo database · Die Bilder zeigen 
 | Folder / file · Ordner / Datei | Content · Inhalt |
 |---|---|
 | `Quellcode` | C# source code · C#-Quellcode |
-| `Resources` | embedded resources (logo) · eingebettete Ressourcen (Logo) |
+| `Resources` | embedded resources (logo, plugin icon) · eingebettete Ressourcen (Logo, Plugin-Icon) |
 | `Screenshots` | images for this page (demo database) · Bilder für diese Seite (Demo-Datenbank) |
 | `Erstellen.bat` | build script · Build-Skript |
 | `ReadMe.txt` / `Liesmich.txt` | manual (English / German) · Anleitung (Englisch / Deutsch) |

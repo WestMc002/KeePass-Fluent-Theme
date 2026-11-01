@@ -92,6 +92,12 @@ namespace FluentTheme
 			get { return "https://raw.githubusercontent.com/WestMc002/KeePass-Fluent-Theme/main/keepass.version"; }
 		}
 
+		/// <summary>Eigenes Icon in der Plugin-Liste von KeePass (Extras › Plugins).</summary>
+		public override Image SmallIcon
+		{
+			get { return AppIcon.GetImage(AppIcon.SmallSize); }
+		}
+
 		public override bool Initialize(IPluginHost host)
 		{
 			if(host == null) return false;
@@ -943,6 +949,7 @@ namespace FluentTheme
 			if(t != PluginMenuType.Main) return null;
 
 			ToolStripMenuItem root = new ToolStripMenuItem(L.T("Fluent-Design"));
+			root.Image = AppIcon.GetImage(AppIcon.SmallSize);
 
 			ToolStripMenuItem miSys = new ToolStripMenuItem(L.T("Wie Windows (automatisch)"));
 			miSys.Click += delegate { SetMode(ThemeMode.System); };

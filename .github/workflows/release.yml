@@ -110,8 +110,11 @@ jobs:
             ) | Set-Content "$wt\Quellcode\VersionInfo.cs" -Encoding utf8
             $out = Join-Path $env:RUNNER_TEMP "out-$ver"
             New-Item -ItemType Directory -Force $out | Out-Null
+            # Icon des Plugins gibt es erst ab 0.68 - ältere Stände ohne
+            $res = @("/resource:$wt\Resources\GS-Logo.png,GS-Logo.png")
+            if (Test-Path "$wt\Resources\FluentTheme.ico") { $res += "/resource:$wt\Resources\FluentTheme.ico,FluentTheme.ico" }
             & $csc /nologo /target:library /optimize+ /codepage:65001 "/out:$out\FluentTheme.dll" `
-              "/resource:$wt\Resources\GS-Logo.png,GS-Logo.png" `
+              $res `
               /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
               "/r:$env:KPEXE" "$wt\Quellcode\*.cs"
             if ($LASTEXITCODE -ne 0) { throw "Kompilieren von v$ver fehlgeschlagen" }

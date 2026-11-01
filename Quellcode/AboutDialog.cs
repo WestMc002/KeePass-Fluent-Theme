@@ -65,7 +65,13 @@ namespace FluentTheme
 			m_p = p;
 			this.Text = L.F("Info über {0}", AppName);
 			this.Name = "FluentThemeAbout";
-			try { if((owner != null) && (owner.Icon != null)) this.Icon = owner.Icon; }
+			// Eigenes Icon des Plugins in der Titelleiste (sonst das von KeePass)
+			try
+			{
+				Icon ico = AppIcon.GetIcon(AppIcon.SmallSize);
+				if(ico != null) this.Icon = ico;
+				else if((owner != null) && (owner.Icon != null)) this.Icon = owner.Icon;
+			}
 			catch(Exception) { }
 			// Normaler Rahmen wie bei den Hauptfenstern, Größe bleibt fest (siehe WndProc)
 			this.FormBorderStyle = FormBorderStyle.Sizable;
