@@ -104,6 +104,13 @@ namespace FluentTheme
 			m_host = host;
 			L.Init(); // Sprache von KeePass übernehmen (Deutsch oder Englisch)
 
+			// Screenshot-Modus (nur mit -fluent-screenshots:"Ordner", für die portable Screenshot-Kopie):
+			// Trigger, zuletzt geöffnete Datenbank und Update-Prüfung abschalten, bevor KeePass sie nutzt
+			string shotDir = null;
+			try { shotDir = KeePass.Program.CommandLineArgs["fluent-screenshots"]; }
+			catch(Exception) { shotDir = null; }
+			if(!string.IsNullOrEmpty(shotDir)) ScreenshotRunner.PrepareConfig();
+
 			try
 			{
 				MainForm mf = host.MainWindow;
@@ -171,6 +178,12 @@ namespace FluentTheme
 
 				if(mf.IsHandleCreated) ApplyAll();
 				else mf.HandleCreated += OnMainHandleCreated;
+
+				if(!string.IsNullOrEmpty(shotDir))
+				{
+					m_shots = new ScreenshotRunner(this, shotDir);
+					mf.FormLoadPost += delegate { m_shots.Start(); };
+				}
 			}
 			catch(Exception ex) { Report(ex); }
 
@@ -236,6 +249,7 @@ namespace FluentTheme
 
 		private bool IsDark()
 		{
+			if(m_shotDark >= 0) return (m_shotDark == 1); // Screenshot-Modus: fest hell/dunkel
 			ThemeMode m = this.Mode;
 			if(m == ThemeMode.Dark) return true;
 			if(m == ThemeMode.Light) return false;
@@ -950,6 +964,7 @@ namespace FluentTheme
 
 			ToolStripMenuItem root = new ToolStripMenuItem(L.T("Fluent-Design"));
 			root.Image = AppIcon.GetImage(AppIcon.SmallSize);
+			m_menuRoot = root;
 
 			ToolStripMenuItem miSys = new ToolStripMenuItem(L.T("Wie Windows (automatisch)"));
 			miSys.Click += delegate { SetMode(ThemeMode.System); };
@@ -1152,6 +1167,26 @@ namespace FluentTheme
 				Gfx.Fill(g, new Rectangle(2, 2, 12, 12), 3, c);
 			}
 			return bmp;
+		}
+
+		// ---------------------------------------------------------------- Screenshots
+
+		private ScreenshotRunner m_shots;
+		private ToolStripMenuItem m_menuRoot;
+		private int m_shotDark = -1; // -1 = normal, 0 = fest hell, 1 = fest dunkel
+
+		internal MainForm ShotMainForm { get { return m_host.MainWindow; } }
+		internal ListView ShotList { get { return m_lv; } }
+		internal DetailsPanel ShotDetails { get { return m_details; } }
+		internal Control ShotListCard { get { return ((m_listCard != null) ? m_listCard.Host : null); } }
+		internal ToolStripMenuItem ShotMenu { get { return m_menuRoot; } }
+
+		/// <summary>Hell oder dunkel für die Screenshots, ohne die gespeicherte Einstellung zu ändern
+		/// (im Menü bleibt „Wie Windows“ angehakt).</summary>
+		internal void ShotTheme(bool dark)
+		{
+			m_shotDark = (dark ? 1 : 0);
+			ApplyAll();
 		}
 
 		private void SetMode(ThemeMode m)

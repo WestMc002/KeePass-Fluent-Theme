@@ -93,6 +93,8 @@ namespace FluentTheme
 		private int m_revealSeconds = 15;
 		private DateTime m_revealUntil = DateTime.MaxValue;
 		private Rectangle m_copiedRect = Rectangle.Empty;
+		private Rectangle m_shotHead = Rectangle.Empty;   // Kopfzeile (Symbol, Titel) – für Screenshots
+		private Rectangle m_shotCard = Rectangle.Empty;   // erste Karte „Anmeldedaten“
 		private DateTime m_copiedUntil = DateTime.MinValue;
 		private int m_clearSeconds;
 		private bool m_notesExpanded;
@@ -192,8 +194,13 @@ namespace FluentTheme
 			if(need != m_timer.Enabled) m_timer.Enabled = need;
 		}
 
+		/// <summary>Für Screenshots: keine Aktualisierung (Countdown des Einmalcodes) zwischen den
+		/// beiden Aufnahmen vor schwarzem und weißem Hintergrund.</summary>
+		public bool Frozen;
+
 		private void OnTimerTick(object sender, EventArgs e)
 		{
+			if(this.Frozen) return;
 			try
 			{
 				DateTime now = DateTime.Now;
@@ -502,6 +509,7 @@ namespace FluentTheme
 			int pathH = m_fLabel.Height + D(2);
 			int tile = Math.Max(D(40), titleH + pathH);
 			Rectangle rTile = new Rectangle(x0, y, tile, tile);
+			m_shotHead = rTile;
 			Gfx.Fill(g, rTile, D(8), m_p.Card);
 			Gfx.Stroke(g, rTile, D(8), m_p.Border);
 			DrawEntryIcon(g, rTile);
@@ -556,6 +564,7 @@ namespace FluentTheme
 				for(int k = 0; k < 3; ++k)
 				{
 					DrawCard(g, k, new Rectangle(x, y, cw[k], rowH), true);
+					if(k == 0) m_shotCard = new Rectangle(x, y, cw[k], rowH);
 					x += cw[k];
 					if(k < 2)
 					{
@@ -585,7 +594,11 @@ namespace FluentTheme
 					int rowH = 0;
 					for(int k = i; k < last; ++k) rowH = Math.Max(rowH, hs[k]);
 					for(int k = i; k < last; ++k)
-						DrawCard(g, k, new Rectangle(x0 + (k - i) * (cardW + gap), y, cardW, rowH), true);
+					{
+						Rectangle rk = new Rectangle(x0 + (k - i) * (cardW + gap), y, cardW, rowH);
+						DrawCard(g, k, rk, true);
+						if(k == 0) m_shotCard = rk;
+					}
 					y += rowH + gap;
 				}
 			}
@@ -1303,6 +1316,37 @@ namespace FluentTheme
 				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Bereich für den Screenshot der Detailansicht: Kopfzeile und erste Karte.</summary>
+		public Rectangle ScreenshotArea
+		{
+			get
+			{
+				if((m_entry == null) || m_shotHead.IsEmpty || m_shotCard.IsEmpty) return Rectangle.Empty;
+				Rectangle r = Rectangle.FromLTRB(m_shotCard.Left, m_shotHead.Top, m_shotCard.Right, m_shotCard.Bottom);
+				r.Inflate(D(8), D(8));
+				r.Intersect(this.ClientRectangle);
+				return r;
+			}
+		}
+
+		/// <summary>Für Screenshots: „Kopiert“-Hinweis am Passwort zeigen, ohne etwas in die
+		/// Zwischenablage zu kopieren.</summary>
+		public void ShowCopiedDemo(int clearSeconds)
+		{
+			int n = 0;
+			foreach(Hit h in m_hits)
+			{
+				if(!h.IsCopy) continue;
+				if(++n < 2) continue; // 1. Kopieren-Knopf = Benutzername, 2. = Passwort
+				m_clearSeconds = clearSeconds;
+				m_copiedRect = h.Rect;
+				m_copiedUntil = DateTime.Now.AddSeconds(4);
+				UpdateTimer();
+				Invalidate();
+				return;
+			}
 		}
 
 		protected override void OnScroll(ScrollEventArgs se)

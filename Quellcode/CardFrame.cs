@@ -27,6 +27,12 @@ namespace FluentTheme
 			m_host = host;
 		}
 
+		/// <summary>Container, auf dem die Karte gezeichnet wird.</summary>
+		public Control Host
+		{
+			get { return m_host; }
+		}
+
 		private int D(int v)
 		{
 			return (int)Math.Round(v * m_s);

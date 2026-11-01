@@ -108,11 +108,28 @@ COPY /Y "%DLL%" "%KPDIR%\Plugins\%NAME%.dll" >NUL
 IF ERRORLEVEL 1 GOTO :ERR_COPY
 ECHO Kopiert nach: %KPDIR%\Plugins\%NAME%.dll
 
+REM Projektspezifisch: Screenshots fuer GitHub aus Demo-Daten (hell und dunkel) nach Screenshots,
+REM in einer eigenen portablen KeePass-Kopie (Design\KeePass-Portable, kommt nicht auf GitHub);
+REM nur auf Nachfrage: ohne Antwort nach 10 Sekunden Nein, bei /nopause nie
+SET "PORTKP=Design\KeePass-Portable"
+IF /I "%~1"=="/nopause" GOTO :NOSHOTS
+IF NOT EXIST "%PORTKP%\KeePass.exe" GOTO :NOSHOTS
+ECHO.
+CHOICE /C JN /T 10 /D N /M "Screenshots fuer GitHub erstellen (nach 10 s automatisch Nein)"
+IF ERRORLEVEL 2 GOTO :NOSHOTS
+IF NOT EXIST "%PORTKP%\Plugins" MKDIR "%PORTKP%\Plugins"
+COPY /Y "%DLL%" "%PORTKP%\Plugins\%NAME%.dll" >NUL
+ECHO Erstelle Screenshots (bitte Maus und Tastatur kurz nicht benutzen) ...
+START "" /WAIT "%CD%\%PORTKP%\KeePass.exe" "-fluent-screenshots:%CD%\Screenshots"
+IF EXIST "Screenshots\Fehler.txt" (ECHO Hinweis: Screenshots fehlgeschlagen - siehe Screenshots\Fehler.txt) ELSE (ECHO Screenshots erstellt.)
+:NOSHOTS
+
 REM Sicherung: komplettes Projekt nach Backup\<Projekt> v<Version>
+REM (ohne die portable KeePass-Kopie fuer die Screenshots)
 SET "BAKDIR=Backup\%NAME% v%VER%"
 ECHO.
 ECHO Sichere nach %BAKDIR% ...
-ROBOCOPY "%CD%" "%CD%\%BAKDIR%" /E /XD "%CD%\Backup" /XF "%NAME%.neu.dll" "Erstellen.log" /R:1 /W:1 /NFL /NDL /NJH /NJS /NP >NUL
+ROBOCOPY "%CD%" "%CD%\%BAKDIR%" /E /XD "%CD%\Backup" "%CD%\Design\KeePass-Portable" /XF "%NAME%.neu.dll" "Erstellen.log" /R:1 /W:1 /NFL /NDL /NJH /NJS /NP >NUL
 IF ERRORLEVEL 8 GOTO :ERR_SNAPSHOT
 ECHO Gesichert.
 

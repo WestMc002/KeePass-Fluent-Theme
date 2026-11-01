@@ -5,6 +5,10 @@ Erstellen.log
 Quellcode/VersionInfo.cs
 *.neu.dll
 
+# Eigene Entwürfe und die portable KeePass-Kopie für die Screenshots
+Design/
+Screenshots/Fehler.txt
+
 # Niemals hochladen: KeePass-Datenbanken, Schlüsseldateien, Konfiguration
 *.kdbx
 *.kdb
