@@ -774,8 +774,11 @@ namespace FluentTheme
 				// Lupe am Anfang des Feldes
 				if(m_editBaseLeft >= 0)
 				{
-					float r = 4.2f * m_s;
-					float cx = m_editBaseLeft + D(10), cy = cr.Top + cr.Height / 2f - 0.8f * m_s;
+					// Kreis plus Griff zusammen senkrecht mittig: Mitte des ganzen Symbols = Mitte des Feldes
+					float r = 4.2f * m_s, grip = 3.6f * m_s;
+					float below = r * 0.7071f + grip;   // Ausdehnung unter dem Kreismittelpunkt
+					float cx = m_editBaseLeft + D(10);
+					float cy = (float)Math.Round(cr.Top + (cr.Height - 1) / 2f - (below - r) / 2f);
 					System.Drawing.Drawing2D.SmoothingMode sm0 = g.SmoothingMode;
 					g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 					using(Pen pen = new Pen(m_p.Sub, Math.Max(1f, 1.3f * m_s)))
@@ -784,7 +787,7 @@ namespace FluentTheme
 						pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
 						g.DrawEllipse(pen, cx - r, cy - r, 2 * r, 2 * r);
 						float d = r * 0.7071f;
-						g.DrawLine(pen, cx + d, cy + d, cx + d + 3.6f * m_s, cy + d + 3.6f * m_s);
+						g.DrawLine(pen, cx + d, cy + d, cx + d + grip, cy + d + grip);
 					}
 					g.SmoothingMode = sm0;
 				}
