@@ -87,6 +87,7 @@ namespace FluentTheme
 			cb.HandleCreated += OnHandleCreated;
 			cb.HandleDestroyed += OnHandleDestroyed;
 			cb.Enter += OnFocusChanged;
+			cb.Enter += OnEnterSelectAll;
 			cb.Leave += OnFocusChanged;
 			cb.DropDown += OnFocusChanged;
 			cb.DropDown += OnDropDown;
@@ -124,6 +125,7 @@ namespace FluentTheme
 				if(selH.ToInt32() > 0) SendMessage(m_cb.Handle, CB_SETITEMHEIGHT, new IntPtr(-1), selH);
 			}
 			CenterEdit();
+			WatchEdit();
 			if(changed) m_cb.Invalidate();
 		}
 
@@ -132,6 +134,7 @@ namespace FluentTheme
 			m_cb.HandleCreated -= OnHandleCreated;
 			m_cb.HandleDestroyed -= OnHandleDestroyed;
 			m_cb.Enter -= OnFocusChanged;
+			m_cb.Enter -= OnEnterSelectAll;
 			m_cb.Leave -= OnFocusChanged;
 			m_cb.DropDown -= OnFocusChanged;
 			m_cb.DropDown -= OnDropDown;
@@ -143,6 +146,10 @@ namespace FluentTheme
 			m_cb.TextChanged -= OnTextChanged;
 			m_cb.DrawMode = DrawMode.Normal;
 			if(this.Handle != IntPtr.Zero) ReleaseHandle();
+			if(m_disBrush != IntPtr.Zero) { DeleteObject(m_disBrush); m_disBrush = IntPtr.Zero; }
+			if(m_selTimer != null) { m_selTimer.Dispose(); m_selTimer = null; }
+			if(m_editWatch != null) { if(m_editWatch.Handle != IntPtr.Zero) m_editWatch.ReleaseHandle(); m_editWatch = null; }
+			if(m_afterSearchTimer != null) { m_afterSearchTimer.Dispose(); m_afterSearchTimer = null; }
 			m_cb.Invalidate();
 		}
 
@@ -151,6 +158,7 @@ namespace FluentTheme
 			if(this.Handle == IntPtr.Zero) AssignHandle(m_cb.Handle);
 			NoTheme();
 			CenterEdit();
+			WatchEdit();
 		}
 
 		/// <summary>Windows-Design für das Feld abschalten: Mit Design zeichnet Windows bei Fokus-
@@ -173,12 +181,148 @@ namespace FluentTheme
 			m_cb.Invalidate();
 		}
 
+		/// <summary>Beim Hineinklicken die bisherige Suche komplett markieren (wie in der Windows-
+		/// Suche oder einer Adressleiste): Tippen ersetzt sie dann, statt sie zu verlängern.
+		/// Nach dem Klick ins Feld setzt Windows den Cursor, deshalb erst danach markieren.</summary>
+		private void OnEnterSelectAll(object sender, EventArgs e)
+		{
+			try
+			{
+				if(!m_cb.IsHandleCreated || (m_cb.Text.Length == 0)) return;
+				// Warten, bis die Maustaste losgelassen ist (höchstens 2 s)
+				if(m_selTimer == null)
+				{
+					m_selTimer = new Timer();
+					m_selTimer.Interval = 40;
+					m_selTimer.Tick += OnSelTimerTick;
+				}
+				m_selTicks = 0;
+				m_selTimer.Start();
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		private Timer m_selTimer;
+		private int m_selTicks;
+
+		private void OnSelTimerTick(object sender, EventArgs e)
+		{
+			try
+			{
+				if(((Control.MouseButtons & MouseButtons.Left) != 0) && (++m_selTicks < 50)) return;
+				m_selTimer.Stop();
+				if(!m_cb.ContainsFocus || ((Control.MouseButtons & MouseButtons.Left) != 0)) return;
+				IntPtr edit = EditHandle();
+				if(edit == IntPtr.Zero) return;
+				int ss, se;
+				GetSel(edit, out ss, out se);
+				if(se > ss) return; // schon etwas markiert (von KeePass nach der Suche oder per Maus)
+				SendMessage(edit, EM_SETSEL, IntPtr.Zero, new IntPtr(-1));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
 		/// <summary>Nach Sperren/Entsperren (KeePass schaltet das Feld ab und wieder an) neu zeichnen,
 		/// samt Eingabefeld darin.</summary>
 		private void OnEnabledChanged(object sender, EventArgs e)
 		{
 			if(this.Handle == IntPtr.Zero) return;
+			// Während KeePass sucht, ist das Feld kurz gesperrt. Eine Markierung würde Windows dann als
+			// blauen Block auf grauem Grund zeigen – solange ausblenden und danach wiederherstellen.
+			try
+			{
+				IntPtr edit = EditHandle();
+				if(edit != IntPtr.Zero)
+				{
+					if(!m_cb.Enabled)
+					{
+						int ss, se;
+						GetSel(edit, out ss, out se);
+						m_disSelStart = ss;
+						m_disSelEnd = se;
+						if(se > ss) SendMessage(edit, EM_SETSEL, new IntPtr(se), new IntPtr(se));
+					}
+					else
+					{
+						if(m_disSelEnd > m_disSelStart)
+							SendMessage(edit, EM_SETSEL, new IntPtr(m_disSelStart), new IntPtr(m_disSelEnd));
+						m_disSelStart = m_disSelEnd = 0;
+						// Nach der Suche soll der Suchbegriff markiert bleiben, damit die nächste Eingabe
+						// ihn ersetzt. KeePass bzw. Windows setzen den Cursor danach aber teils an den
+						// Anfang (dann entstand z. B. „winwinsim“) – kurz nachprüfen und wieder markieren.
+						m_afterSearchText = m_cb.Text;
+						m_afterSearchChecks = 0;
+						if(m_afterSearchTimer == null)
+						{
+							m_afterSearchTimer = new Timer();
+							m_afterSearchTimer.Interval = 100;
+							m_afterSearchTimer.Tick += OnAfterSearchTick;
+						}
+						m_afterSearchTimer.Start();
+					}
+				}
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
 			RedrawWindow(this.Handle, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+		}
+
+		private int m_disSelStart, m_disSelEnd;
+		private Timer m_afterSearchTimer;
+		private string m_afterSearchText = string.Empty;
+		private int m_afterSearchChecks;
+
+		private void OnAfterSearchTick(object sender, EventArgs e)
+		{
+			try
+			{
+				// etwa 1 Sekunde lang prüfen, danach nicht mehr eingreifen
+				if(++m_afterSearchChecks > 10) { m_afterSearchTimer.Stop(); return; }
+				if(!m_cb.Enabled || (m_cb.Text != m_afterSearchText) || (m_cb.Text.Length == 0))
+				{
+					if(m_cb.Text != m_afterSearchText) m_afterSearchTimer.Stop(); // Nutzer tippt schon
+					return;
+				}
+				if(!m_cb.ContainsFocus || ((Control.MouseButtons & MouseButtons.Left) != 0)) return;
+				IntPtr edit = EditHandle();
+				if(edit == IntPtr.Zero) return;
+				int ss, se;
+				GetSel(edit, out ss, out se);
+				if(se > ss) return;
+				SendMessage(edit, EM_SETSEL, IntPtr.Zero, new IntPtr(-1));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+		private IntPtr m_disBrush = IntPtr.Zero;
+		private Color m_disBrushColor = Color.Empty;
+		private const int WM_CTLCOLORSTATIC = 0x0138;
+
+		[DllImport("gdi32.dll")]
+		private static extern IntPtr CreateSolidBrush(int crColor);
+
+		[DllImport("gdi32.dll")]
+		private static extern bool DeleteObject(IntPtr hObject);
+
+		[DllImport("gdi32.dll")]
+		private static extern int SetBkColor(IntPtr hdc, int crColor);
+
+		[DllImport("gdi32.dll")]
+		private static extern int SetTextColor(IntPtr hdc, int crColor);
+
+		/// <summary>Gesperrtes Textfeld (während der Suche) in Feldfarbe statt Windows-Grau zeichnen,
+		/// damit es zum übrigen Suchfeld passt; die Schrift wird nur grau.</summary>
+		private bool PaintDisabledEdit(ref Message m)
+		{
+			if((m_p == null) || m_cb.Enabled || (m.WParam == IntPtr.Zero)) return false;
+			if((m_disBrush == IntPtr.Zero) || (m_disBrushColor != m_p.Card))
+			{
+				if(m_disBrush != IntPtr.Zero) DeleteObject(m_disBrush);
+				m_disBrush = CreateSolidBrush(ColorTranslator.ToWin32(m_p.Card));
+				m_disBrushColor = m_p.Card;
+			}
+			SetBkColor(m.WParam, ColorTranslator.ToWin32(m_p.Card));
+			SetTextColor(m.WParam, ColorTranslator.ToWin32(m_p.Sub));
+			m.Result = m_disBrush;
+			return true;
 		}
 
 		/// <summary>Liste der früheren Suchen: leer gar nicht erst öffnen, sonst abgerundet,
@@ -278,6 +422,12 @@ namespace FluentTheme
 			m_cb.Invalidate();
 		}
 
+		private int m_editBaseLeft = -1;   // Lage des Textfelds, wie Windows es setzt
+		private int m_editSetLeft = -1;    // Lage, die zuletzt hier gesetzt wurde
+
+		/// <summary>Platz für die Lupe links im Suchfeld.</summary>
+		private int SearchIconWidth { get { return D(22); } }
+
 		private bool HasText()
 		{
 			return !string.IsNullOrEmpty(m_cb.Text);
@@ -297,6 +447,10 @@ namespace FluentTheme
 		/// <summary>Suchfeld leeren und den Cursor wieder hineinsetzen.</summary>
 		private void ClearText()
 		{
+			// erst die Auswahl aus der Liste lösen, sonst setzt das Suchfeld beim nächsten Tippen
+			// wieder den alten Begriff ein
+			try { m_cb.SelectedIndex = -1; }
+			catch(Exception) { }
 			m_cb.Text = string.Empty;
 			m_hotClear = false;
 			m_cb.Cursor = Cursors.Default;
@@ -315,6 +469,7 @@ namespace FluentTheme
 
 		protected override void WndProc(ref Message m)
 		{
+			if((m.Msg == WM_CTLCOLORSTATIC) && PaintDisabledEdit(ref m)) return;
 			if(m_p != null)
 			{
 				if(m.Msg == WM_ERASEBKGND)
@@ -346,20 +501,70 @@ namespace FluentTheme
 				{
 					try { ClearText(); }
 					catch(Exception ex) { FluentThemeExt.Report(ex); }
+					m_swallowUp = true;
 					m.Result = IntPtr.Zero;
 					return;
 				}
+			}
+			// zum geschluckten Klick auf das „x“ gehört auch das Loslassen – nicht ans Feld weitergeben
+			if((m.Msg == WM_LBUTTONUP) && m_swallowUp)
+			{
+				m_swallowUp = false;
+				m.Result = IntPtr.Zero;
+				return;
 			}
 			// Bei Größen-/Lageänderungen markiert Windows den ganzen Text im Feld – beim Tippen würde
 			// der nächste Buchstabe dann alles ersetzen. Markierung deshalb sichern und wiederherstellen.
 			bool resize = ((m.Msg == WM_SIZE) || (m.Msg == WM_WINDOWPOSCHANGED));
 			IntPtr edit = (resize ? EditHandle() : IntPtr.Zero);
 			int selStart = 0, selEnd = 0;
-			bool keep = ((edit != IntPtr.Zero) && m_cb.ContainsFocus && GetSel(edit, out selStart, out selEnd));
+			bool keep = ((edit != IntPtr.Zero) && GetSel(edit, out selStart, out selEnd));
+			string textBefore = (keep ? GetEditText(edit) : null);
 			base.WndProc(ref m);
 			// Windows setzt das Textfeld bei jeder Größenänderung oben an – danach wieder mittig setzen
 			if((m_p != null) && resize) CenterEdit();
-			if(keep) RestoreSel(edit, selStart, selEnd);
+			if(!keep) return;
+			// Bei jeder Größenänderung sucht das Windows-Suchfeld in der Liste der letzten Suchen einen
+			// Eintrag, der mit dem Getippten beginnt, setzt ihn ein und markiert alles (aus „w“ wurde
+			// „winsim“, der nächste Buchstabe ersetzte dann alles). Das hier wieder rückgängig machen.
+			string textAfter = GetEditText(edit);
+			if(textAfter != textBefore)
+			{
+				SetEditText(edit, textBefore);
+				SendMessage(edit, EM_SETSEL, new IntPtr(selStart), new IntPtr(selEnd));
+				return;
+			}
+			// Nur die Markierung „alles“ rückgängig machen, die Windows bei Größenänderungen setzt
+			if(m_cb.ContainsFocus)
+			{
+				int s2, e2;
+				GetSel(edit, out s2, out e2);
+				bool allNow = ((s2 == 0) && (e2 >= textBefore.Length) && (textBefore.Length > 0));
+				bool allBefore = ((selStart == 0) && (selEnd >= textBefore.Length));
+				if(allNow && !allBefore) RestoreSel(edit, selStart, selEnd);
+			}
+		}
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern int GetWindowTextLength(IntPtr hWnd);
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
+		private static extern IntPtr SendMessageStr(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
+
+		private static string GetEditText(IntPtr edit)
+		{
+			int n = GetWindowTextLength(edit);
+			System.Text.StringBuilder sb = new System.Text.StringBuilder(n + 1);
+			GetWindowText(edit, sb, n + 1);
+			return sb.ToString();
+		}
+
+		private static void SetEditText(IntPtr edit, string text)
+		{
+			SendMessageStr(edit, 0x000C, IntPtr.Zero, text ?? string.Empty); // WM_SETTEXT
 		}
 
 		private const int EM_GETSEL = 0x00B0, EM_SETSEL = 0x00B1;
@@ -389,7 +594,86 @@ namespace FluentTheme
 		}
 
 		private const int WM_SIZE = 0x0005, WM_WINDOWPOSCHANGED = 0x0047, WM_WINDOWPOSCHANGING = 0x0046;
-		private const int WM_LBUTTONDOWN = 0x0201, WM_LBUTTONDBLCLK = 0x0203;
+		private const int WM_LBUTTONDOWN = 0x0201, WM_LBUTTONDBLCLK = 0x0203, WM_LBUTTONUP = 0x0202;
+		private bool m_swallowUp;
+
+		/// <summary>Beobachtet das Textfeld im Suchfeld, um den Textcursor zu ersetzen.</summary>
+		private sealed class EditWatch : NativeWindow
+		{
+			private readonly SearchBoxPainter m_owner;
+			public EditWatch(SearchBoxPainter owner) { m_owner = owner; }
+
+			protected override void WndProc(ref Message m)
+			{
+				base.WndProc(ref m);
+				// Windows legt den Textcursor beim Fokus neu an – danach durch den kürzeren ersetzen
+				if((m.Msg == 0x0007) || ((m.Msg == 0x0030) && (GetFocus() == m.HWnd))) // WM_SETFOCUS, WM_SETFONT
+					m_owner.ApplyCaret(m.HWnd);
+			}
+		}
+
+		[DllImport("user32.dll")]
+		private static extern IntPtr GetFocus();
+
+		[DllImport("user32.dll")]
+		private static extern bool CreateCaret(IntPtr hWnd, IntPtr hBitmap, int nWidth, int nHeight);
+
+		[DllImport("user32.dll")]
+		private static extern bool ShowCaret(IntPtr hWnd);
+
+		[DllImport("gdi32.dll", EntryPoint = "DeleteObject")]
+		private static extern bool DeleteGdiObject(IntPtr hObject);
+
+		private IntPtr m_caretBmp = IntPtr.Zero;
+		private Size m_caretSize = Size.Empty;
+
+		/// <summary>Kürzerer Textcursor: Windows zeichnet ihn so hoch wie die ganze Textzeile (fast so
+		/// hoch wie das Feld). Ein Bild mit gleich hohem, aber oben und unten leerem Strich ergibt einen
+		/// kürzeren Cursor, der trotzdem mittig zur Schrift sitzt (Windows setzt ihn immer oben an).</summary>
+		internal void ApplyCaret(IntPtr edit)
+		{
+			try
+			{
+				int line = m_cb.Font.Height;
+				int w = Math.Max(SystemInformation.CaretWidth, (int)Math.Round(m_s));
+				if(line <= 4) return;
+				Size sz = new Size(w, line);
+				if((m_caretBmp == IntPtr.Zero) || (m_caretSize != sz))
+				{
+					if(m_caretBmp != IntPtr.Zero) { DeleteGdiObject(m_caretBmp); m_caretBmp = IntPtr.Zero; }
+					using(Bitmap b = new Bitmap(w, line, System.Drawing.Imaging.PixelFormat.Format24bppRgb))
+					using(Graphics g = Graphics.FromImage(b))
+					{
+						// Schwarz = unverändert, Weiß = invertiert (sichtbarer Strich)
+						g.Clear(Color.Black);
+						int top = (int)Math.Round(line * 0.17);
+						int bottom = (int)Math.Round(line * 0.87);
+						using(SolidBrush br = new SolidBrush(Color.White))
+							g.FillRectangle(br, 0, top, w, Math.Max(1, bottom - top));
+						m_caretBmp = b.GetHbitmap();
+					}
+					m_caretSize = sz;
+				}
+				if(CreateCaret(edit, m_caretBmp, 0, 0)) ShowCaret(edit);
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		private EditWatch m_editWatch;
+
+		private void WatchEdit()
+		{
+			try
+			{
+				IntPtr edit = EditHandle();
+				if(edit == IntPtr.Zero) return;
+				if((m_editWatch != null) && (m_editWatch.Handle == edit)) return;
+				if((m_editWatch != null) && (m_editWatch.Handle != IntPtr.Zero)) m_editWatch.ReleaseHandle();
+				m_editWatch = new EditWatch(this);
+				m_editWatch.AssignHandle(edit);
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
 		private const int SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002;
 
 		[StructLayout(LayoutKind.Sequential)]
@@ -436,15 +720,24 @@ namespace FluentTheme
 				// Höhe auf eine Textzeile begrenzen (das Textfeld schreibt immer oben in sein Fenster)
 				int h = Math.Min(er.Height, m_cb.Font.Height + D(2));
 				int top = (m_cb.ClientSize.Height - h) / 2;
+				// Links Platz für die Lupe (immer, damit der Text beim Tippen nicht springt). Hat Windows
+				// das Textfeld selbst neu gesetzt, gilt dessen Lage als Ausgangspunkt.
+				if((m_editBaseLeft < 0) || (er.Left != m_editSetLeft)) m_editBaseLeft = er.Left;
+				int left = m_editBaseLeft + this.SearchIconWidth;
 				// rechts Platz für das „x“ lassen (Windows zieht das Textfeld bis an den Pfeil)
-				int w = er.Width;
+				int w = er.Right - left;
 				Rectangle rb = ButtonRect();
-				if(!rb.IsEmpty) w = Math.Max(D(40), rb.Left - this.ClearWidth - er.Left);
-				if((Math.Abs(top - er.Top) < 1) && (h == er.Height) && (w == er.Width)) return;
+				if(!rb.IsEmpty) w = Math.Max(D(40), rb.Left - this.ClearWidth - left);
+				m_editSetLeft = left;
+				if((Math.Abs(top - er.Top) < 1) && (h == er.Height) && (w == er.Width) && (left == er.Left))
+				{
+					m_cb.Invalidate();
+					return;
+				}
 				const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 				int ss, se;
 				GetSel(ci.hwndItem, out ss, out se);
-				SetWindowPos(ci.hwndItem, IntPtr.Zero, er.Left, top, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+				SetWindowPos(ci.hwndItem, IntPtr.Zero, left, top, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
 				RestoreSel(ci.hwndItem, ss, se);
 				m_cb.Invalidate();
 			}
@@ -476,6 +769,24 @@ namespace FluentTheme
 					Color cc = (m_hotButton ? m_p.Text : m_p.Sub);
 					Gfx.Chevron(g, hb.Left + hb.Width / 2f, hb.Top + hb.Height / 2f, 7f * m_s, m_cb.DroppedDown,
 						cc, Math.Max(1f, 1.1f * m_s));
+				}
+
+				// Lupe am Anfang des Feldes
+				if(m_editBaseLeft >= 0)
+				{
+					float r = 4.2f * m_s;
+					float cx = m_editBaseLeft + D(10), cy = cr.Top + cr.Height / 2f - 0.8f * m_s;
+					System.Drawing.Drawing2D.SmoothingMode sm0 = g.SmoothingMode;
+					g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+					using(Pen pen = new Pen(m_p.Sub, Math.Max(1f, 1.3f * m_s)))
+					{
+						pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+						pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+						g.DrawEllipse(pen, cx - r, cy - r, 2 * r, 2 * r);
+						float d = r * 0.7071f;
+						g.DrawLine(pen, cx + d, cy + d, cx + d + 3.6f * m_s, cy + d + 3.6f * m_s);
+					}
+					g.SmoothingMode = sm0;
 				}
 
 				// „x“ zum Leeren, nur wenn etwas im Feld steht

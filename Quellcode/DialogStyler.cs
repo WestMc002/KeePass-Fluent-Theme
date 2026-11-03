@@ -31,6 +31,7 @@ namespace FluentTheme
 		private readonly HashSet<Form> m_alignHooked = new HashSet<Form>();
 		private Palette m_p;
 		private float m_s = 1f;
+		private readonly HashSet<TabControl> m_fitTabs = new HashSet<TabControl>();
 		private EventInfo m_gwmEvent;
 		private Delegate m_gwmHandler;
 
@@ -305,11 +306,22 @@ namespace FluentTheme
 					}
 					// Mehr Innenabstand, damit die Beschriftungen in den abgerundeten Tabs nicht
 					// abgeschnitten werden und die Akzentlinie unter dem Text bleibt
-					Point pad = new Point((int)Math.Round(12 * m_s), (int)Math.Round(7 * m_s));
-					if((tc.Padding.X < pad.X) || (tc.Padding.Y < pad.Y)) tc.Padding = pad;
 					Font bold;
 					try { bold = new Font("Segoe UI Semibold", tc.Font.SizeInPoints); }
 					catch(ArgumentException) { bold = new Font(tc.Font, FontStyle.Bold); }
+					// Bei vielen Tabs (z. B. Optionen) den seitlichen Abstand so weit verringern, dass alle
+					// in die Breite passen – sonst blendet Windows Pfeile ein, die über den Tabs liegen.
+					// Auch später noch, wenn Plugins Tabs hinzufügen oder der Dialog seine Größe ändert.
+					bool firstFit = m_fitTabs.Add(tc);
+					FitTabs(tc, firstFit);
+					if(firstFit)
+					{
+						TabControl t2 = tc;
+						// später hinzugefügte Tabs (Plugins): Abstand nur noch verkleinern, nie vergrößern –
+						// das Ändern des Abstands legt das Steuerelement neu an, ein Hin und Her würde hängen
+						tc.ControlAdded += delegate { BeginFitTabs(t2); };
+						tc.Disposed += delegate { m_fitTabs.Remove(t2); };
+					}
 					painter.Underline = true;
 					painter.Update(p, m_s, tc.Font, bold);
 				}
@@ -374,6 +386,55 @@ namespace FluentTheme
 		}
 
 		/// <summary>Registerkarten-Inhalt als Karte: runde Ecken in Fensterfarbe, feiner Rahmen.</summary>
+		private void BeginFitTabs(TabControl tc)
+		{
+			try
+			{
+				if(tc.IsHandleCreated && !tc.IsDisposed) tc.BeginInvoke(new MethodInvoker(delegate { FitTabs(tc, false); }));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Seitlichen Innenabstand der Tabs so wählen, dass alle Tabs in eine Zeile passen
+		/// (höchstens 12, mindestens 3 bei 100 %). Gemessen an den echten Tab-Breiten von Windows.</summary>
+		private bool m_fitting;
+
+		private void FitTabs(TabControl tc, bool allowGrow)
+		{
+			if(m_fitting) return;
+			m_fitting = true;
+			try
+			{
+				if(tc.IsDisposed) return;
+				int maxPad = (int)Math.Round(12 * m_s);
+				int minPad = (int)Math.Round(3 * m_s);
+				int padY = Math.Max((int)Math.Round(8 * m_s), tc.Padding.Y);
+				int n = tc.TabCount;
+				int padX = maxPad;
+				if((n > 0) && tc.IsHandleCreated && (tc.ClientSize.Width > 0))
+				{
+					// Breite der Tabs ohne Innenabstand aus den aktuellen Tab-Rechtecken
+					int total = 0;
+					for(int i = 0; i < n; ++i)
+					{
+						int w = tc.GetTabRect(i).Width;
+						if(w <= 0) return; // noch nicht angeordnet – nichts ändern
+						total += w;
+					}
+					int text = total - 2 * tc.Padding.X * n;
+					// Platz für den Rand und die halbfette Schrift des aktiven Tabs
+					int avail = tc.ClientSize.Width - (int)Math.Round(16 * m_s);
+					if(text + 2 * maxPad * n > avail)
+						padX = Math.Max(minPad, Math.Min(maxPad, (avail - text) / (2 * n)));
+				}
+				else if(n > 0) return; // ohne Maße nichts ändern
+				if(!allowGrow) padX = Math.Min(padX, tc.Padding.X);
+				if((tc.Padding.X != padX) || (tc.Padding.Y < padY)) tc.Padding = new Point(padX, Math.Max(padY, tc.Padding.Y));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+			finally { m_fitting = false; }
+		}
+
 		private void OnCardPaint(object sender, PaintEventArgs e)
 		{
 			TabPage tp = (sender as TabPage);

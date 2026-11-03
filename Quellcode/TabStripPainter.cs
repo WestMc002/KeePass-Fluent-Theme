@@ -157,10 +157,11 @@ namespace FluentTheme
 				bool sel = (i == m_tc.SelectedIndex);
 				bool hot = (i == m_hot);
 
-				// Text etwas oberhalb der Mitte, darunter Platz für den Akzentstrich
-				Rectangle tr = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom - D(5));
+				// Text oberhalb der Mitte, darunter der Akzentstrich – mit etwas Luft nach unten,
+				// damit der Strich nicht direkt auf der Trennlinie bzw. der Karte darunter sitzt
+				Rectangle tr = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom - D(9));
 				if(hot && !sel)
-					Gfx.Fill(g, Rectangle.FromLTRB(r.Left + D(2), r.Top + D(2), r.Right - D(2), r.Bottom - D(6)), D(4),
+					Gfx.Fill(g, Rectangle.FromLTRB(r.Left + D(2), r.Top + D(1), r.Right - D(2), r.Bottom - D(9)), D(4),
 						Palette.Blend(m_p.Bg, m_p.Text, m_p.Dark ? 0.08 : 0.05));
 				string text = m_tc.TabPages[i].Text;
 				TextRenderer.DrawText(g, text, sel ? m_fontSel : m_font, tr, sel ? m_p.Text : m_p.Sub, tf);
@@ -168,7 +169,7 @@ namespace FluentTheme
 				if(sel)
 				{
 					int w = D(16), h = Math.Max(2, D(3));
-					Gfx.Fill(g, new Rectangle(r.Left + (r.Width - w) / 2, r.Bottom - D(4), w, h), h / 2, m_p.Pill);
+					Gfx.Fill(g, new Rectangle(r.Left + (r.Width - w) / 2, r.Bottom - D(7) - h, w, h), h / 2, m_p.Pill);
 				}
 			}
 			// feine Trennlinie unter der Tab-Leiste
