@@ -6,7 +6,7 @@ ECHO #                                     #
 ECHO #  Autor: Guenther Schoder            #
 ECHO #         www.westmc002.de            #
 ECHO #                                     #
-ECHO #  Datum: 29.10.2026 / 01.11.2026     #
+ECHO #  Datum: 29.10.2026 / 05.11.2026     #
 ECHO #######################################
 ECHO.
 
@@ -23,7 +23,7 @@ REM KPDIR     = KeePass-Programmordner
 REM EXTRAREFS = zusaetzliche Verweise (hier KeePass.exe)
 REM Abweichung von der Vorlage: Plugin-DLL in Bin statt EXE, kein Icon,
 REM danach Kopie in den KeePass-Plugins-Ordner und Start von KeePass
-SET "MAJOR=0"
+SET "MAJOR=1"
 SET "NAME=FluentTheme"
 SET "NAMESPACE=FluentTheme"
 SET "SRCDIR=Quellcode"

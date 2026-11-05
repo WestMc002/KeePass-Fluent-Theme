@@ -97,11 +97,37 @@ namespace FluentTheme
 			cb.DrawItem += OnDrawItem;
 			cb.EnabledChanged += OnEnabledChanged;
 			cb.TextChanged += OnTextChanged;
+			// Ursprüngliche Höhe des Eingabebereichs merken, bevor das Umstellen auf eigenes Zeichnen
+			// sie verändert (siehe KeepFieldHeight)
+			if(cb.IsHandleCreated) m_fieldH = GetFieldHeight();
 			// Das Umstellen legt das Feld neu an – dabei hängt sich OnHandleCreated schon ein.
 			// Deshalb danach nur einhängen, wenn noch nicht geschehen (sonst Ausnahme).
 			cb.DrawMode = DrawMode.OwnerDrawFixed;
 			if(cb.IsHandleCreated && (this.Handle == IntPtr.Zero)) AssignHandle(cb.Handle);
 			NoTheme();
+		}
+
+		private int m_fieldH = -1;
+		private float m_fieldScale = 0f; // 0 = Skalierung beim Merken noch unbekannt
+
+		/// <summary>Höhe des Eingabebereichs (ohne Rahmen) laut Windows.</summary>
+		private int GetFieldHeight()
+		{
+			try { return SendMessage(m_cb.Handle, CB_GETITEMHEIGHT, new IntPtr(-1), IntPtr.Zero).ToInt32(); }
+			catch(Exception) { return -1; }
+		}
+
+		/// <summary>Der Eingabebereich behält seine ursprüngliche Höhe; nur die Zeilen der
+		/// aufgeklappten Liste sind höher.</summary>
+		private void KeepFieldHeight()
+		{
+			try
+			{
+				if((m_fieldH <= 0) || !m_cb.IsHandleCreated) return;
+				if(GetFieldHeight() != m_fieldH)
+					SendMessage(m_cb.Handle, CB_SETITEMHEIGHT, new IntPtr(-1), new IntPtr(m_fieldH));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 
 		private int D(int v)
@@ -118,12 +144,15 @@ namespace FluentTheme
 			m_back = back;
 			// Höhere Zeilen nur in der Liste – das Suchfeld selbst behält seine Höhe
 			int ih = Math.Max(m_cb.Font.Height + D(10), D(28));
-			if((m_cb.ItemHeight != ih) && m_cb.IsHandleCreated)
+			if(m_cb.IsHandleCreated)
 			{
-				IntPtr selH = SendMessage(m_cb.Handle, CB_GETITEMHEIGHT, new IntPtr(-1), IntPtr.Zero);
-				m_cb.ItemHeight = ih;
-				if(selH.ToInt32() > 0) SendMessage(m_cb.Handle, CB_SETITEMHEIGHT, new IntPtr(-1), selH);
+				if(m_fieldH <= 0) m_fieldH = GetFieldHeight();
+				else if((m_fieldScale > 0f) && (m_fieldScale != scale)) // andere Bildschirmskalierung
+					m_fieldH = (int)Math.Round(m_fieldH * scale / m_fieldScale);
+				m_fieldScale = scale;
+				if(m_cb.ItemHeight != ih) m_cb.ItemHeight = ih;
 			}
+			KeepFieldHeight();
 			CenterEdit();
 			WatchEdit();
 			if(changed) m_cb.Invalidate();
@@ -157,6 +186,11 @@ namespace FluentTheme
 		{
 			if(this.Handle == IntPtr.Zero) AssignHandle(m_cb.Handle);
 			NoTheme();
+			// Beim Neuanlegen (z. B. Wechsel hell/dunkel) setzt WinForms den Eingabebereich auf die
+			// Höhe der Listenzeilen – das Feld wird höher als die Symbolleiste und unten abgeschnitten
+			KeepFieldHeight();
+			try { m_cb.BeginInvoke(new MethodInvoker(delegate() { KeepFieldHeight(); CenterEdit(); m_cb.Invalidate(); })); }
+			catch(Exception) { }
 			CenterEdit();
 			WatchEdit();
 		}
