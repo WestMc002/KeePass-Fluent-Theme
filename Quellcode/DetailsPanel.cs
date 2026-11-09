@@ -98,6 +98,8 @@ namespace FluentTheme
 		private DateTime m_copiedUntil = DateTime.MinValue;
 		private int m_clearSeconds;
 		private bool m_notesExpanded;
+		private NotesBox m_notesBox;      // Notizen als markierbarer Text (einzelne Teile kopieren)
+		private bool m_notesPlaced;       // beim Zeichnen gesetzt; sonst wird das Feld ausgeblendet
 		private Totp m_totp;
 		private long m_totpTick = -1;
 
@@ -283,6 +285,7 @@ namespace FluentTheme
 			m_fHead = MakeFont("Segoe UI Semibold", SizeHead, FontStyle.Regular, FontStyle.Bold);
 			m_fMono = MakeFont("Consolas", SizeBase + 0.5f, FontStyle.Regular, FontStyle.Regular);
 			m_rowH = Math.Max(D(30), m_fBase.Height + D(14));
+			if(m_notesBox != null) StyleNotesBox();
 			Invalidate();
 		}
 
@@ -343,6 +346,103 @@ namespace FluentTheme
 		{
 			m_notesExpanded = !m_notesExpanded;
 			Invalidate();
+		}
+
+		/// <summary>Setzt das markierbare Notizenfeld an die gezeichnete Stelle. false = nicht möglich,
+		/// dann wird der Text wie bisher gezeichnet.</summary>
+		private bool PlaceNotesBox(Rectangle rn, string notes)
+		{
+			try
+			{
+				if(m_notesBox == null)
+				{
+					m_notesBox = new NotesBox();
+					StyleNotesBox();
+					this.Controls.Add(m_notesBox);
+				}
+				// Zeilenumbrüche wie im Eingabefeld (CRLF), sonst zeigt das Feld sie nicht an
+				string t = notes.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+				if(m_notesBox.Text != t)
+				{
+					m_notesBox.Text = t;
+					m_notesBox.Select(0, 0);
+				}
+				if(m_notesBox.Bounds != rn)
+				{
+					bool hChanged = (m_notesBox.Height != rn.Height);
+					m_notesBox.Bounds = rn;
+					// Auf-/Zuklappen: wieder ab der ersten Zeile anzeigen
+					if(hChanged && (m_notesBox.SelectionLength == 0)) { m_notesBox.Select(0, 0); m_notesBox.ScrollToCaret(); }
+				}
+				if(!m_notesBox.Visible) m_notesBox.Visible = true;
+				m_notesPlaced = true;
+				return true;
+			}
+			catch(Exception ex)
+			{
+				FluentThemeExt.Report(ex);
+				return false;
+			}
+		}
+
+		private void StyleNotesBox()
+		{
+			m_notesBox.Font = m_fBase;
+			m_notesBox.BackColor = m_p.Card;
+			m_notesBox.ForeColor = m_p.Text;
+			m_notesBox.SetNoMargins();
+		}
+
+		/// <summary>Schreibgeschütztes, randloses Textfeld für die Notizen: Text mit der Maus markieren
+		/// und mit Strg+C oder dem Kontextmenü kopieren.</summary>
+		private sealed class NotesBox : TextBox
+		{
+			private const int EM_SETMARGINS = 0xD3, EC_LEFTMARGIN = 1, EC_RIGHTMARGIN = 2;
+
+			[System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+			private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+			public NotesBox()
+			{
+				this.ReadOnly = true;
+				this.Multiline = true;
+				this.WordWrap = true;
+				this.ScrollBars = ScrollBars.None;
+				this.BorderStyle = BorderStyle.None;
+				this.TabStop = false;
+				this.Cursor = Cursors.IBeam;
+				this.HideSelection = true;
+				this.Visible = false;
+			}
+
+			public void SetNoMargins()
+			{
+				if(this.IsHandleCreated)
+					SendMessage(this.Handle, EM_SETMARGINS, new IntPtr(EC_LEFTMARGIN | EC_RIGHTMARGIN), IntPtr.Zero);
+			}
+
+			protected override void OnHandleCreated(EventArgs e)
+			{
+				base.OnHandleCreated(e);
+				SetNoMargins();
+			}
+
+			protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+			{
+				// Strg+C/Strg+A hier selbst behandeln – sonst greifen die Tastenkürzel von KeePass
+				// (z. B. Passwort kopieren) und nicht die Markierung
+				if((keyData == (Keys.Control | Keys.C)) || (keyData == (Keys.Control | Keys.Insert)))
+				{
+					if(this.SelectionLength > 0) Copy();
+					return true;
+				}
+				if(keyData == (Keys.Control | Keys.A))
+				{
+					SelectAll();
+					return true;
+				}
+				return base.ProcessCmdKey(ref msg, keyData);
+			}
 		}
 
 		private void CopyField(PwEntry pe, string key)
@@ -473,6 +573,7 @@ namespace FluentTheme
 			Graphics g = e.Graphics;
 			g.Clear(m_p.Bg);
 			m_hits.Clear();
+			m_notesPlaced = false;
 			try { PaintContent(g); }
 			catch(Exception ex)
 			{
@@ -482,6 +583,7 @@ namespace FluentTheme
 					this.ClientRectangle, m_p.Sub, TextFormatFlags.HorizontalCenter |
 					TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
 			}
+			if(!m_notesPlaced && (m_notesBox != null) && m_notesBox.Visible) m_notesBox.Visible = false;
 		}
 
 		private void PaintContent(Graphics g)
@@ -1063,7 +1165,8 @@ namespace FluentTheme
 				if(draw)
 				{
 					Rectangle rn = new Rectangle(innerX, y + D(4), textW, nh);
-					TextRenderer.DrawText(g, notes, m_fBase, rn, m_p.Text, nf);
+					// Als markierbares Textfeld, damit sich auch einzelne Teile kopieren lassen
+					if(!PlaceNotesBox(rn, notes)) TextRenderer.DrawText(g, notes, m_fBase, rn, m_p.Text, nf);
 					DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("Notizen kopieren"),
 						delegate { CopyField(pe, PwDefs.NotesField); }));
 					if(rb == m_copiedRect)
@@ -1347,6 +1450,12 @@ namespace FluentTheme
 				Invalidate();
 				return;
 			}
+		}
+
+		/// <summary>Beim Klick in die Notizen nicht automatisch scrollen (sonst springt die Ansicht).</summary>
+		protected override Point ScrollToControl(Control activeControl)
+		{
+			return this.DisplayRectangle.Location;
 		}
 
 		protected override void OnScroll(ScrollEventArgs se)
