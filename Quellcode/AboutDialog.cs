@@ -116,7 +116,7 @@ namespace FluentTheme
 			table.BackColor = p.Card;
 			table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(118)));
 			table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-			ToolTip tip = new ToolTip();
+			ToolTip tip = new ModernToolTip();
 			this.Disposed += delegate { tip.Dispose(); };
 
 			string dll = string.Empty;
@@ -273,8 +273,9 @@ namespace FluentTheme
 			}
 		}
 
-		/// <summary>Runder Knopf mit Symbol. Primary = Akzentfarbe ausgefüllt, sonst Karte mit Rahmen.</summary>
-		private sealed class InfoButton : Button
+		/// <summary>Runder Knopf mit Symbol. Primary = Akzentfarbe ausgefüllt, sonst Karte mit Rahmen.
+		/// Wird auch vom Meldungsfenster (MsgDialog) verwendet.</summary>
+		internal sealed class InfoButton : Button
 		{
 			private readonly Palette m_p;
 			private readonly float k;

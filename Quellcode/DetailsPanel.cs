@@ -67,7 +67,7 @@ namespace FluentTheme
 		private readonly ListView m_lv;
 		private readonly EntryListPainter m_painter;
 		private readonly List<Hit> m_hits = new List<Hit>();
-		private readonly ToolTip m_tip = new ToolTip();
+		private readonly ToolTip m_tip = new ModernToolTip();
 
 		private Palette m_p;
 		private float m_s = 1f;

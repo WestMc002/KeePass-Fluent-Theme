@@ -20,7 +20,7 @@ namespace FluentTheme
 		private static Image s_logo;
 		private static bool s_logoLoaded;
 
-		private readonly ToolTip m_tip = new ToolTip();
+		private readonly ToolTip m_tip = new ModernToolTip();
 		private Palette m_p;
 		private float m_s = 1f;
 		private Font m_font;

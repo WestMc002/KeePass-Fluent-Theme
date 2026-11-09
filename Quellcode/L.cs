@@ -179,7 +179,15 @@ namespace FluentTheme
 			// Anhang speichern
 			{ "Anhang speichern", "Save attachment" },
 			{ "Alle Dateien (*.*)|*.*", "All files (*.*)|*.*" },
-			{ "Der Anhang konnte nicht gespeichert werden:", "The attachment could not be saved:" },
+			{ "Der Anhang konnte nicht gespeichert werden. Bitte prüfen, ob der Ordner beschreibbar ist und die Datei nicht gerade geöffnet ist.",
+				"The attachment could not be saved. Please check that the folder is writable and the file is not open." },
+
+			// Meldungen
+			{ "Ja", "Yes" },
+			{ "Nein", "No" },
+			{ "Abbrechen", "Cancel" },
+			{ "Wiederholen", "Retry" },
+			{ "Ignorieren", "Ignore" },
 
 			// Info-Fenster
 			{ "Info über {0}", "About {0}" },

@@ -55,6 +55,7 @@ namespace FluentTheme
 		private IPluginHost m_host;
 		private Timer m_timer;
 		private Palette m_p;
+		private static Palette s_current;
 		private float m_s = 1f;
 		private FluentRenderer m_renderer;
 		private readonly List<ToolStrip> m_strips = new List<ToolStrip>();
@@ -77,6 +78,12 @@ namespace FluentTheme
 		private ToolStripControlHost m_badgeHost;
 		private ToolStripStatusLabel m_badgeSpring;
 		private bool m_applying;
+
+		/// <summary>Aktuelle Farben (für Meldungen und Tooltips); null, solange das Design noch nicht geladen ist.</summary>
+		internal static Palette CurrentPalette
+		{
+			get { return s_current; }
+		}
 
 		internal static void Report(Exception ex)
 		{
@@ -312,6 +319,7 @@ namespace FluentTheme
 			{
 				bool dark = IsDark();
 				m_p = Palette.Create(dark, GetAccent());
+				s_current = m_p;
 				BannerStyler.Install(m_p);
 				using(Graphics g = mf.CreateGraphics()) { m_s = g.DpiX / 96f; }
 
@@ -1108,7 +1116,7 @@ namespace FluentTheme
 				if(rep.Length == 0) return;
 				Clipboard.SetText(rep);
 				MessageBox.Show(m_host.MainWindow, L.T("Der Fehlerbericht wurde in die Zwischenablage kopiert."),
-					L.T("Fluent-Design"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+					"Fluent Theme", MessageBoxButtons.OK, MessageBoxIcon.Information);
 			};
 			root.DropDownItems.Add(miErr);
 

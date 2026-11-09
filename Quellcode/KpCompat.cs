@@ -236,8 +236,10 @@ namespace FluentTheme
 				try { File.WriteAllBytes(dlg.FileName, pb.ReadData()); }
 				catch(Exception ex)
 				{
-					MessageBox.Show(owner, L.T("Der Anhang konnte nicht gespeichert werden:") + Environment.NewLine +
-						ex.Message, L.T("Fluent-Design"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+					// Technische Details nur in den Fehlerbericht, nicht in die Meldung
+					FluentThemeExt.Report(ex);
+					MessageBox.Show(owner, L.T("Der Anhang konnte nicht gespeichert werden. Bitte prüfen, ob der Ordner beschreibbar ist und die Datei nicht gerade geöffnet ist."),
+						"Fluent Theme", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 				}
 			}
 		}
