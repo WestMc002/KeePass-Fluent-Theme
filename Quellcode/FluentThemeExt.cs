@@ -220,6 +220,7 @@ namespace FluentTheme
 					m_tv.EnabledChanged -= OnTreeEnabledChanged;
 				}
 				m_menus.Detach();
+				ModernToolTip.DetachAll();
 				RemoveBadge();
 				if(m_dialogs != null) m_dialogs.Detach();
 				if(m_treeScroll != null) { m_treeScroll.Dispose(); m_treeScroll = null; }
@@ -561,6 +562,7 @@ namespace FluentTheme
 		private void StyleToolStrip(ToolStrip ts)
 		{
 			ts.Renderer = m_renderer;
+			ModernToolTip.AttachTo(ts); // Tooltips der Symbolleiste im Fluent-Design
 			ts.BackColor = m_p.Bg;
 			ts.ForeColor = m_p.Text;
 			foreach(ToolStripItem it in ts.Items)

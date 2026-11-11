@@ -100,6 +100,11 @@ namespace FluentTheme
 		private bool m_notesExpanded;
 		private NotesBox m_notesBox;      // Notizen als markierbarer Text (einzelne Teile kopieren)
 		private bool m_notesPlaced;       // beim Zeichnen gesetzt; sonst wird das Feld ausgeblendet
+		private Rectangle m_notesHole = Rectangle.Empty;   // Aussparung für „Kopiert“ (siehe SetNotesHole)
+		private Rectangle m_notesHoleBounds = Rectangle.Empty;
+		// Markierbare Werte (Benutzername, weitere Felder): je Zeile ein Textfeld, beim Zeichnen gesetzt
+		private readonly List<NotesBox> m_fieldBoxes = new List<NotesBox>();
+		private int m_fieldUsed;
 		private Totp m_totp;
 		private long m_totpTick = -1;
 
@@ -286,6 +291,7 @@ namespace FluentTheme
 			m_fMono = MakeFont("Consolas", SizeBase + 0.5f, FontStyle.Regular, FontStyle.Regular);
 			m_rowH = Math.Max(D(30), m_fBase.Height + D(14));
 			if(m_notesBox != null) StyleNotesBox();
+			foreach(NotesBox fb in m_fieldBoxes) { fb.Font = m_fBase; fb.SetNoMargins(); }
 			Invalidate();
 		}
 
@@ -306,6 +312,9 @@ namespace FluentTheme
 			{
 				m_reveal = false;
 				m_notesExpanded = false;
+				// Markierungen des vorherigen Eintrags aufheben
+				if(m_notesBox != null) m_notesBox.Select(0, 0);
+				foreach(NotesBox fb in m_fieldBoxes) fb.Select(0, 0);
 				m_copiedRect = Rectangle.Empty;
 				UpdateTimer();
 				this.AutoScrollPosition = new Point(0, 0);
@@ -356,7 +365,7 @@ namespace FluentTheme
 			{
 				if(m_notesBox == null)
 				{
-					m_notesBox = new NotesBox();
+					m_notesBox = new NotesBox(true);
 					StyleNotesBox();
 					this.Controls.Add(m_notesBox);
 				}
@@ -385,6 +394,77 @@ namespace FluentTheme
 			}
 		}
 
+		/// <summary>Spart im Notizenfeld die Fläche der Rückmeldung „Kopiert“ aus (Rectangle.Empty = nichts).</summary>
+		private void SetNotesHole(Rectangle hole)
+		{
+			try
+			{
+				if(m_notesBox == null) return;
+				if((hole == m_notesHole) && (m_notesBox.Bounds == m_notesHoleBounds)) return;
+				m_notesHole = hole;
+				m_notesHoleBounds = m_notesBox.Bounds;
+				Region old = m_notesBox.Region;
+				if(hole.IsEmpty) m_notesBox.Region = null;
+				else
+				{
+					Region rg = new Region(new Rectangle(Point.Empty, m_notesBox.Size));
+					hole.Offset(-m_notesBox.Left, -m_notesBox.Top);
+					rg.Exclude(hole);
+					m_notesBox.Region = rg;
+				}
+				if(old != null) old.Dispose();
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Setzt ein einzeiliges, markierbares Textfeld über den Wert einer Zeile. false = nicht
+		/// möglich, dann wird der Wert wie bisher gezeichnet.</summary>
+		private bool PlaceFieldBox(Graphics g, Rectangle rv, string text, Font font, Color color, string tip)
+		{
+			try
+			{
+				// TextRenderer rückt Text um diesen Zuschlag ein; das Textfeld hat keinen Rand
+				int pad = (int)Math.Ceiling(font.Height / 6f);
+				int tw = TextRenderer.MeasureText(g, text, font, Size.Empty, TextFormatFlags.NoPrefix |
+					TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+				int avail = rv.Width - pad;
+				if(avail < D(12)) return false;
+				// Nur so breit wie der Text: rechts daneben bleibt Platz für die Rückmeldung „Kopiert“
+				int w = Math.Min(avail, tw + D(2));
+
+				NotesBox b;
+				if(m_fieldUsed < m_fieldBoxes.Count) b = m_fieldBoxes[m_fieldUsed];
+				else
+				{
+					b = new NotesBox(false);
+					m_fieldBoxes.Add(b);
+					this.Controls.Add(b);
+				}
+				if(!object.ReferenceEquals(b.Font, font)) { b.Font = font; b.SetNoMargins(); }
+				if(b.BackColor != m_p.Card) b.BackColor = m_p.Card;
+				if(b.ForeColor != color) b.ForeColor = color;
+				if(b.Text != text)
+				{
+					b.Text = text;
+					b.Select(0, 0);
+				}
+				int h = b.PreferredHeight;
+				Rectangle rb = new Rectangle(rv.Left + pad, rv.Top + (rv.Height - h) / 2, w, h);
+				if(b.Bounds != rb) b.Bounds = rb;
+				// Abgeschnittener Wert: ganzer Text als Tooltip
+				string want = (((tw + D(2)) > avail) ? (tip ?? string.Empty) : string.Empty);
+				if(m_tip.GetToolTip(b) != want) m_tip.SetToolTip(b, want);
+				if(!b.Visible) b.Visible = true;
+				++m_fieldUsed;
+				return true;
+			}
+			catch(Exception ex)
+			{
+				FluentThemeExt.Report(ex);
+				return false;
+			}
+		}
+
 		private void StyleNotesBox()
 		{
 			m_notesBox.Font = m_fBase;
@@ -393,8 +473,8 @@ namespace FluentTheme
 			m_notesBox.SetNoMargins();
 		}
 
-		/// <summary>Schreibgeschütztes, randloses Textfeld für die Notizen: Text mit der Maus markieren
-		/// und mit Strg+C oder dem Kontextmenü kopieren.</summary>
+		/// <summary>Schreibgeschütztes, randloses Textfeld für die Notizen (mehrzeilig) und für einzelne
+		/// Werte (einzeilig): Text mit der Maus markieren und mit Strg+C oder dem Kontextmenü kopieren.</summary>
 		private sealed class NotesBox : TextBox
 		{
 			private const int EM_SETMARGINS = 0xD3, EC_LEFTMARGIN = 1, EC_RIGHTMARGIN = 2;
@@ -402,11 +482,11 @@ namespace FluentTheme
 			[System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
 			private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
-			public NotesBox()
+			public NotesBox(bool multiline)
 			{
 				this.ReadOnly = true;
-				this.Multiline = true;
-				this.WordWrap = true;
+				this.Multiline = multiline;
+				this.WordWrap = multiline;
 				this.ScrollBars = ScrollBars.None;
 				this.BorderStyle = BorderStyle.None;
 				this.TabStop = false;
@@ -512,7 +592,7 @@ namespace FluentTheme
 		}
 
 		/// <summary>„Kopiert ✓ · wird nach x s geleert“ links neben dem gedrückten Kopieren-Knopf.</summary>
-		private void DrawCopiedLabel(Graphics g, Rectangle rb, int minX)
+		private Rectangle DrawCopiedLabel(Graphics g, Rectangle rb, int minX)
 		{
 			// Lange Fassung, wenn Platz ist, sonst kürzer – nie über den Wert schreiben oder abschneiden
 			List<string> variants = new List<string>();
@@ -531,7 +611,7 @@ namespace FluentTheme
 				tw = TextWidth(g, v, m_fLabel) + D(16);
 				if(tw <= avail) { txt = v; break; }
 			}
-			if(txt == null) return; // nicht einmal „Kopiert“ passt – der Haken am Knopf genügt
+			if(txt == null) return Rectangle.Empty; // nicht einmal „Kopiert“ passt – der Haken am Knopf genügt
 
 			int h = m_fLabel.Height + D(8);
 			Rectangle r = new Rectangle(rb.Left - D(6) - tw, rb.Top + (rb.Height - h) / 2, tw, h);
@@ -540,6 +620,7 @@ namespace FluentTheme
 			TextRenderer.DrawText(g, txt, m_fLabel, r, m_p.Dark ? m_p.Good : Palette.Blend(m_p.Good, Color.Black, 0.15),
 				TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
 				TextFormatFlags.NoPrefix);
+			return r;
 		}
 
 		private Hit HitAt(Point pt)
@@ -574,6 +655,7 @@ namespace FluentTheme
 			g.Clear(m_p.Bg);
 			m_hits.Clear();
 			m_notesPlaced = false;
+			m_fieldUsed = 0;
 			try { PaintContent(g); }
 			catch(Exception ex)
 			{
@@ -584,6 +666,10 @@ namespace FluentTheme
 					TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
 			}
 			if(!m_notesPlaced && (m_notesBox != null) && m_notesBox.Visible) m_notesBox.Visible = false;
+			for(int i = m_fieldUsed; i < m_fieldBoxes.Count; ++i)
+			{
+				if(m_fieldBoxes[i].Visible) m_fieldBoxes[i].Visible = false;
+			}
 		}
 
 		private void PaintContent(Graphics g)
@@ -846,7 +932,7 @@ namespace FluentTheme
 		}
 
 		private int Row(Graphics g, Rectangle r, int y, int lw, string label, string value, Font font,
-			Color color, bool draw, bool lineBelow, string valueTip, Action valueClick, Btn[] btns)
+			Color color, bool draw, bool lineBelow, string valueTip, Action valueClick, bool selectable, Btn[] btns)
 		{
 			int rowH = m_rowH;
 			if(!draw) return y + rowH;
@@ -879,6 +965,10 @@ namespace FluentTheme
 				bool hotLink = (rl == m_hotRect);
 				TextRenderer.DrawText(g, shown, hotLink ? m_fLink : font, rv, color, TfLine);
 				AddHit(rl, valueClick, valueTip);
+			}
+			else if(selectable && PlaceFieldBox(g, rv, shown, font, color, valueTip))
+			{
+				// Wert steht in einem markierbaren Textfeld (einzelne Teile kopieren)
 			}
 			else
 			{
@@ -916,12 +1006,12 @@ namespace FluentTheme
 			string pw = pe.Strings.ReadSafe(PwDefs.PasswordField);
 			string url = pe.Strings.ReadSafe(PwDefs.UrlField);
 
-			y = Row(g, r, y, lw, L.T("Benutzername"), user, m_fBase, m_p.Text, draw, true, null, null, new Btn[] {
+			y = Row(g, r, y, lw, L.T("Benutzername"), user, m_fBase, m_p.Text, draw, true, user, null, true, new Btn[] {
 				new Btn(Glyph.Copy, L.T("Benutzername kopieren"), delegate { CopyField(pe, PwDefs.UserNameField); }) });
 
 			string pwShown = ((pw.Length == 0) ? string.Empty : (m_reveal ? pw : Mask));
 			y = Row(g, r, y, lw, L.T("Passwort"), pwShown, m_reveal ? m_fMono : m_fBase, m_p.Text, draw, true, null, null,
-				new Btn[] {
+				false, new Btn[] {
 					new Btn(m_reveal ? Glyph.EyeOff : Glyph.Eye, m_reveal ? L.T("Passwort verbergen") :
 						L.T("Passwort anzeigen"), ToggleReveal),
 					new Btn(Glyph.Copy, L.T("Passwort kopieren"), delegate { CopyField(pe, PwDefs.PasswordField); }) });
@@ -929,7 +1019,7 @@ namespace FluentTheme
 			Action openUrl = null;
 			if(url.Trim().Length > 0) openUrl = delegate { KpCompat.OpenEntryUrl(m_host, pe); };
 			y = Row(g, r, y, lw, L.T("URL"), url, m_fBase, m_p.Link, draw, (pw.Length > 0) || (m_totp != null), url, openUrl,
-				new Btn[] {
+				false, new Btn[] {
 				new Btn(Glyph.Open, L.T("URL öffnen"), delegate { KpCompat.OpenEntryUrl(m_host, pe); }),
 				new Btn(Glyph.Copy, L.T("URL kopieren"), delegate { CopyField(pe, PwDefs.UrlField); }) });
 
@@ -1104,7 +1194,7 @@ namespace FluentTheme
 
 				y = Row(g, r, y, lw, key, masked ? ((val.Length > 0) ? Mask : string.Empty) : val,
 					(prot && m_reveal) ? m_fMono : m_fBase, isUrl ? m_p.Link : m_p.Text, draw,
-					i < list.Count - 1, masked ? null : val, open, bl.ToArray());
+					i < list.Count - 1, masked ? null : val, open, !prot && !isUrl, bl.ToArray());
 			}
 			return y + D(4) - r.Top;
 		}
@@ -1169,8 +1259,10 @@ namespace FluentTheme
 					if(!PlaceNotesBox(rn, notes)) TextRenderer.DrawText(g, notes, m_fBase, rn, m_p.Text, nf);
 					DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("Notizen kopieren"),
 						delegate { CopyField(pe, PwDefs.NotesField); }));
-					if(rb == m_copiedRect)
-						DrawCopiedLabel(g, rb, innerX + D(40));
+					// „Kopiert“ liegt über der ersten Notizzeile – das Textfeld dort aussparen, sonst verdeckt es die Rückmeldung
+					Rectangle hole = Rectangle.Empty;
+					if(rb == m_copiedRect) hole = DrawCopiedLabel(g, rb, innerX + D(40));
+					SetNotesHole(hole);
 				}
 				y += nh + D(8);
 

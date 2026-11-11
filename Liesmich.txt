@@ -34,6 +34,9 @@ Funktionen
 - Windows-Akzentfarbe oder eine eigene Akzentfarbe
 - Moderne Menüs, Symbolleiste mit farbigen Fluent-Symbolen,
   Registerkarten und schmale Scrollleisten
+- Modernes Suchfeld mit Lupe und Knopf zum Leeren
+- Meldungen und Tooltips des Plugins im selben Design (hell und dunkel),
+  auch die Tooltips der Symbolleiste
 - Gestaltete KeePass-Dialoge (Eintrag bearbeiten, Optionen usw.):
   Inhalt auf einer Karte, einheitliche Eingabefelder mit Akzentlinie
 - Gruppenbaum und Eintragsliste mit abgerundeter Auswahl, Akzentstreifen
@@ -51,6 +54,9 @@ Funktionen
   - Passwortstärke als Balken
   - weitere Felder (z. B. "URL 2"), Links sind anklickbar
   - Notizen mit Kopieren-Knopf, lange Notizen lassen sich aufklappen
+  - Text markieren und einzeln kopieren (Strg+C oder Rechtsklick):
+    in den Notizen, beim Benutzernamen und in den weiteren Feldern
+    (nicht bei Passwörtern und geschützten Feldern)
   - Anhänge per Klick öffnen oder speichern
   - Erstellt / Geändert / Läuft ab
 - Nach dem Kopieren erscheint kurz "Kopiert" mit dem Hinweis, nach

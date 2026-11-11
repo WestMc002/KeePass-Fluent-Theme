@@ -27,7 +27,7 @@ The plugin speaks **English and German** and follows the language of KeePass.
 
 - **Windows 11 colors** in light and dark mode – follows Windows or fixed
 - **Windows accent color** or a custom accent color
-- **Modern interface:** menus with rounded corners, colored Fluent icons in the toolbar, tabs, slim scroll bars, modern search box
+- **Modern interface:** menus with rounded corners, colored Fluent icons in the toolbar, tabs, slim scroll bars, modern search box with magnifier, messages and tooltips in the same design
 - **Group tree and entry list** with rounded selection, accent bar and hover effect; adjustable row height
 - **Expiry hints:** red badge “Expired”, orange badge “in x days” (time span adjustable)
 - **Entry details as cards**
@@ -35,6 +35,7 @@ The plugin speaks **English and German** and follows the language of KeePass.
   - **display of the one-time code (TOTP)** with countdown and copy button – reads KeePass' `TimeOtp-*` fields and an `otp` field in KeePassXC/KeeOtp format. Two-factor login is still set up in KeePass or a TOTP plugin; Fluent Theme only displays the code.
   - other fields (e.g. “URL 2”), clickable links
   - notes with copy button, long notes can be expanded
+  - **select text and copy parts of it** (Ctrl+C or right-click) in the notes, the user name and the other fields – not for passwords and protected fields
   - open or save attachments with one click
   - clickable tags (shows all entries with that tag)
 - **“Copied” hint** with the time after which KeePass clears the clipboard
@@ -78,7 +79,7 @@ Das Plugin spricht **Deutsch und Englisch** und folgt der Sprache von KeePass.
 
 - **Windows-11-Farben** im hellen und dunklen Modus – folgt Windows oder fest eingestellt
 - **Windows-Akzentfarbe** oder eine eigene Akzentfarbe
-- **Moderne Oberfläche:** Menüs mit abgerundeten Ecken, farbige Fluent-Symbole in der Symbolleiste, Registerkarten, schmale Scrollleisten, modernes Suchfeld
+- **Moderne Oberfläche:** Menüs mit abgerundeten Ecken, farbige Fluent-Symbole in der Symbolleiste, Registerkarten, schmale Scrollleisten, modernes Suchfeld mit Lupe, Meldungen und Tooltips im selben Design
 - **Gruppenbaum und Eintragsliste** mit abgerundeter Auswahl, Akzentstreifen und Hover-Effekt; Zeilenhöhe einstellbar
 - **Ablauf-Hinweise:** rotes Badge „Abgelaufen“, oranges Badge „in x Tagen“ (Zeitspanne einstellbar)
 - **Detailansicht als Karten**
@@ -86,6 +87,7 @@ Das Plugin spricht **Deutsch und Englisch** und folgt der Sprache von KeePass.
   - **Anzeige des Einmalcodes (TOTP)** mit Countdown und Kopieren-Knopf – liest die `TimeOtp-*`-Felder von KeePass sowie ein Feld `otp` im Format von KeePassXC/KeeOtp. Eingerichtet wird die Zwei-Faktor-Anmeldung weiterhin in KeePass bzw. einem TOTP-Plugin; das Fluent Theme zeigt den Code nur an.
   - weitere Felder (z. B. „URL 2“), Links anklickbar
   - Notizen mit Kopieren-Knopf, lange Notizen aufklappbar
+  - **Text markieren und einzeln kopieren** (Strg+C oder Rechtsklick) in den Notizen, beim Benutzernamen und in den weiteren Feldern – nicht bei Passwörtern und geschützten Feldern
   - Anhänge per Klick öffnen oder speichern
   - Tags anklickbar (zeigt alle Einträge mit diesem Tag)
 - **„Kopiert“-Hinweis** mit der Zeit, nach der KeePass die Zwischenablage leert

@@ -34,6 +34,9 @@ Features
 - Windows accent color or a custom accent color
 - Modern menus, toolbar with colored Fluent icons, tabs and slim
   scroll bars
+- Modern search box with magnifier and clear button
+- Messages and tooltips of the plugin in the same design (light and
+  dark), including the toolbar tooltips
 - Restyled KeePass dialogs (edit entry, options etc.): content on a
   card, consistent input fields with an accent line
 - Group tree and entry list with rounded selection, accent bar and
@@ -51,6 +54,9 @@ Features
   - password strength as a bar
   - other fields (e.g. "URL 2"), links are clickable
   - notes with copy button, long notes can be expanded
+  - select text and copy parts of it (Ctrl+C or right-click): in the
+    notes, the user name and the other fields (not for passwords and
+    protected fields)
   - open or save attachments with one click
   - created / modified / expires
 - After copying, "Copied" is shown briefly together with the number of

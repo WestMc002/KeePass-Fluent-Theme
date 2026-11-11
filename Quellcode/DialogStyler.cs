@@ -345,7 +345,7 @@ namespace FluentTheme
 					if(!(c is TabPage)) c.BackColor = c.Parent.BackColor;
 					c.ForeColor = p.Text;
 				}
-				else if(c is ToolStrip) { /* Renderer ist global gesetzt */ }
+				else if(c is ToolStrip) ModernToolTip.AttachTo((ToolStrip)c); // Renderer ist global gesetzt
 				else
 				{
 					c.ForeColor = p.Text;
