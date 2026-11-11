@@ -146,7 +146,10 @@ namespace FluentTheme
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 			DisableLegacyShadow(dd);
 			NativeMethods.SetPopupStyle(dd.Handle, m_p.Border);
-			try { MoveToContextClick(dd); }
+			try
+			{
+				if(!MoveToContextClick(dd)) KeepOnMonitor(dd);
+			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 
@@ -258,21 +261,21 @@ namespace FluentTheme
 
 		/// <summary>Öffnet sich ein Menü der Menüleiste direkt nach einem Klick im Kontextmenü
 		/// (z. B. „Weitere Befehle“), erscheint es an der Klickstelle statt unter der Menüleiste.</summary>
-		private void MoveToContextClick(ToolStripDropDown dd)
+		private bool MoveToContextClick(ToolStripDropDown dd)
 		{
-			if(m_ctxClickPt.IsEmpty) return;
+			if(m_ctxClickPt.IsEmpty) return false;
 			double ms = (DateTime.Now - m_ctxClickTime).TotalMilliseconds;
 			ToolStripItem owner = dd.OwnerItem;
 			string name = ((owner != null) ? owner.Name : "(kein Besitzer)");
 			if(ms > 2000)
 			{
 				m_ctxClickPt = Point.Empty; // abgelaufen – normale Menüs nicht mehr anfassen
-				return;
+				return false;
 			}
-			if((owner == null) || !(owner.Owner is MenuStrip)) return;
+			if((owner == null) || !(owner.Owner is MenuStrip)) return false;
 			// Hat der Nutzer die Menüleiste selbst angeklickt, nichts verschieben
 			ToolStrip bar = owner.Owner;
-			if(bar.IsHandleCreated && bar.RectangleToScreen(bar.ClientRectangle).Contains(Cursor.Position)) return;
+			if(bar.IsHandleCreated && bar.RectangleToScreen(bar.ClientRectangle).Contains(Cursor.Position)) return false;
 
 			// Klickstelle nicht verbrauchen: KeePass/WinForms öffnen das Menü teils zweimal kurz
 			// hintereinander – jede Öffnung innerhalb von 2 s kommt an die Klickstelle
@@ -313,6 +316,72 @@ namespace FluentTheme
 				t.Start();
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
+			return true;
+		}
+
+		/// <summary>Hält ein Menü auf dem Bildschirm, auf dem es geöffnet wurde. WinForms schiebt ein Menü,
+		/// das am Bildschirmrand nicht ganz passt, sonst auf den Nachbarbildschirm (es wählt den Bildschirm,
+		/// auf dem der größere Teil des Menüs läge).</summary>
+		private void KeepOnMonitor(ToolStripDropDown dd)
+		{
+			Rectangle b = dd.Bounds; // Bildschirmkoordinaten
+			int w = b.Width, h = b.Height;
+			if((w <= 0) || (h <= 0)) return;
+			Rectangle wa;
+			int x, y;
+			ToolStripItem owner = dd.OwnerItem;
+			ToolStrip parent = ((owner != null) ? owner.Owner : null);
+			if((parent != null) && parent.IsHandleCreated)
+			{
+				// Menü eines Eintrags: maßgeblich ist der Bildschirm, auf dem der Eintrag liegt
+				Rectangle ir = parent.RectangleToScreen(owner.Bounds);
+				wa = Screen.FromPoint(new Point(ir.Left + ir.Width / 2, ir.Top + ir.Height / 2)).WorkingArea;
+				if(wa.Contains(b)) return;
+				if(parent is ToolStripDropDown)
+				{
+					// Untermenü: rechts neben dem Elternmenü, sonst links davon
+					Rectangle pr = parent.Bounds;
+					x = pr.Right - D(4);
+					if(x + w > wa.Right) x = pr.Left - w + D(4);
+					y = b.Top;
+				}
+				else
+				{
+					// Menüleiste/Symbolleiste: unter dem Eintrag, sonst darüber
+					x = ir.Left;
+					y = ir.Bottom;
+					if((y + h > wa.Bottom) && (ir.Top - h >= wa.Top)) y = ir.Top - h;
+				}
+			}
+			else
+			{
+				// Kontextmenü: maßgeblich ist der Bildschirm der Klickstelle
+				Point cur = Cursor.Position;
+				ContextMenuStrip cms = (dd as ContextMenuStrip);
+				Control src = ((cms != null) ? cms.SourceControl : null);
+				Form f = ((src != null) ? src.FindForm() : Form.ActiveForm);
+				bool atCursor = ((f == null) || f.Bounds.Contains(cur));
+				if(atCursor) wa = Screen.FromPoint(cur).WorkingArea;
+				else wa = Screen.FromControl(f).WorkingArea; // per Tastatur geöffnet
+				if(wa.Contains(b)) return;
+				if(atCursor)
+				{
+					// Wie Windows: passt es rechts/unten nicht, öffnet es links/über der Klickstelle
+					x = cur.X;
+					if(x + w > wa.Right) x = cur.X - w;
+					y = cur.Y;
+					if(y + h > wa.Bottom) y = cur.Y - h;
+				}
+				else { x = b.Left; y = b.Top; }
+			}
+			x = Math.Max(wa.Left, Math.Min(x, wa.Right - w));
+			y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
+			Point target = new Point(x, y);
+			if(target == b.Location) return;
+			// Position festhalten, bis das Menü schließt – WinForms setzt sie sonst wieder zurück
+			PositionPin.Pin(dd, target);
+			dd.Location = target;
+			PositionPin.MoveTo(dd.Handle, target);
 		}
 
 		/// <summary>Globale Vorgabe: Menüs ohne Symbole bekommen keine leere Symbolspalte
