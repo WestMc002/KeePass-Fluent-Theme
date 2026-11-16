@@ -6,7 +6,7 @@ ECHO #                                     #
 ECHO #  Autor: Guenther Schoder            #
 ECHO #         www.westmc002.de            #
 ECHO #                                     #
-ECHO #  Datum: 29.10.2026 / 05.11.2026     #
+ECHO #  Datum: 29.10.2026 / 16.11.2026     #
 ECHO #######################################
 ECHO.
 
@@ -19,8 +19,12 @@ REM NAME      = Programmname = Name der DLL ohne .dll (auch Backup-Ordner)
 REM NAMESPACE = C#-Namespace, in dem die Klasse AppInfo liegt
 REM SRCDIR    = Ordner mit allen .cs-Dateien (VersionInfo.cs wird dort erzeugt)
 REM RESDIR    = Ordner mit GS-Logo.png und FluentTheme.ico (Icon des Plugins)
-REM KPDIR     = KeePass-Programmordner
-REM EXTRAREFS = zusaetzliche Verweise (hier KeePass.exe)
+REM KPDIR     = KeePass-Programmordner (dorthin wird das Plugin kopiert)
+REM REFVER    = aelteste unterstuetzte KeePass-Version. Gegen sie wird kompiliert:
+REM             KeePass laedt ein Plugin nur, wenn es gegen dieselbe oder eine
+REM             aeltere Version gebaut wurde. Gleiche Version im Workflow auf GitHub.
+REM REFDIR    = portable KeePass-Kopie in genau dieser Version (auch fuer Screenshots)
+REM EXTRAREFS = zusaetzliche Verweise (hier KeePass.exe aus REFDIR)
 REM Abweichung von der Vorlage: Plugin-DLL in Bin statt EXE, kein Icon,
 REM danach Kopie in den KeePass-Plugins-Ordner und Start von KeePass
 SET "MAJOR=1"
@@ -29,7 +33,9 @@ SET "NAMESPACE=FluentTheme"
 SET "SRCDIR=Quellcode"
 SET "RESDIR=Resources"
 SET "KPDIR=C:\Program Files (x86)\KeePass"
-SET "EXTRAREFS="/r:%KPDIR%\KeePass.exe""
+SET "REFVER=2.62"
+SET "REFDIR=Design\KeePass-Portable"
+SET "EXTRAREFS="/r:%REFDIR%\KeePass.exe""
 SET "DLL=Bin\%NAME%.dll"
 SET "NEWDLL=Bin\%NAME%.neu.dll"
 
@@ -42,6 +48,11 @@ SET "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 IF NOT EXIST "%CSC%" SET "CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe"
 IF NOT EXIST "%CSC%" GOTO :ERR_CSC
 IF NOT EXIST "%KPDIR%\KeePass.exe" GOTO :ERR_KEEPASS
+
+REM Verweis zum Kompilieren: portable Kopie in der aeltesten unterstuetzten Version
+IF NOT EXIST "%REFDIR%\KeePass.exe" GOTO :ERR_REF
+powershell -NoProfile -Command "if(-not ((Get-Item -LiteralPath '%REFDIR%\KeePass.exe').VersionInfo.FileVersion -like '%REFVER%.*')){exit 1}"
+IF ERRORLEVEL 1 GOTO :ERR_REFVER
 
 REM KeePass muss beendet sein (sonst ist die Plugin-DLL gesperrt)
 :WAITEXE
@@ -60,6 +71,7 @@ IF "%MINOR%"=="" GOTO :ERR_VERSION
 FOR /F "usebackq delims=" %%V IN (`powershell -NoProfile -Command "Get-Date -Format 'yyyy.MMdd'"`) DO SET "DATEVER=%%V"
 SET "VER=%MAJOR%.%MINOR%.%DATEVER%"
 ECHO KeePass-Ordner: %KPDIR%
+ECHO Gebaut gegen:   KeePass %REFVER% (%REFDIR%)
 ECHO Neue Version:   %VER%
 ECHO.
 
@@ -111,7 +123,7 @@ ECHO Kopiert nach: %KPDIR%\Plugins\%NAME%.dll
 REM Projektspezifisch: Screenshots fuer GitHub aus Demo-Daten (hell und dunkel) nach Screenshots,
 REM in einer eigenen portablen KeePass-Kopie (Design\KeePass-Portable, kommt nicht auf GitHub);
 REM nur auf Nachfrage: ohne Antwort nach 10 Sekunden Nein, bei /nopause nie
-SET "PORTKP=Design\KeePass-Portable"
+SET "PORTKP=%REFDIR%"
 IF /I "%~1"=="/nopause" GOTO :NOSHOTS
 IF NOT EXIST "%PORTKP%\KeePass.exe" GOTO :NOSHOTS
 ECHO.
@@ -129,7 +141,7 @@ REM (ohne die portable KeePass-Kopie fuer die Screenshots)
 SET "BAKDIR=Backup\%NAME% v%VER%"
 ECHO.
 ECHO Sichere nach %BAKDIR% ...
-ROBOCOPY "%CD%" "%CD%\%BAKDIR%" /E /XD "%CD%\Backup" "%CD%\Design\KeePass-Portable" /XF "%NAME%.neu.dll" "Erstellen.log" /R:1 /W:1 /NFL /NDL /NJH /NJS /NP >NUL
+ROBOCOPY "%CD%" "%CD%\%BAKDIR%" /E /XD "%CD%\Backup" "%CD%\%REFDIR%" /XF "%NAME%.neu.dll" "Erstellen.log" /R:1 /W:1 /NFL /NDL /NJH /NJS /NP >NUL
 IF ERRORLEVEL 8 GOTO :ERR_SNAPSHOT
 ECHO Gesichert.
 
@@ -157,6 +169,21 @@ GOTO :Ende
 COLOR C0
 SET "RESULT=1"
 ECHO Fehler: KeePass.exe wurde nicht gefunden in %KPDIR%
+GOTO :Ende
+
+:ERR_REF
+COLOR C0
+SET "RESULT=1"
+ECHO Fehler: Die portable KeePass-Kopie fehlt: %REFDIR%\KeePass.exe
+ECHO Bitte KeePass %REFVER% (portables ZIP) dorthin entpacken.
+GOTO :Ende
+
+:ERR_REFVER
+COLOR C0
+SET "RESULT=1"
+ECHO Fehler: In %REFDIR% liegt nicht KeePass %REFVER%.
+ECHO Gegen diese Version wird kompiliert (aelteste unterstuetzte Version).
+ECHO Bitte KeePass %REFVER% (portables ZIP) dorthin entpacken.
 GOTO :Ende
 
 :ERR_VERSION

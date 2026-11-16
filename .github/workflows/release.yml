@@ -72,7 +72,7 @@ jobs:
               '2. KeePass beenden und die DLL in den Ordner `Plugins` von KeePass kopieren, z. B. `C:\Program Files (x86)\KeePass\Plugins`. Bei einem Update die vorhandene `FluentTheme.dll` einfach ersetzen.',
               '3. KeePass starten. Das Design passt sich automatisch an hell/dunkel und die Windows-Akzentfarbe an; Einstellungen unter Extras › Fluent-Design.',
               '',
-              'Voraussetzung: KeePass 2.x unter Windows 10 oder 11 (runde Ecken und einige Details nur unter Windows 11). Ausführliche Beschreibung: README und `Liesmich.txt` im Repository.',
+              'Voraussetzung: KeePass 2.62 oder neuer unter Windows 10 oder 11 (runde Ecken und einige Details nur unter Windows 11). Ausführliche Beschreibung: README und `Liesmich.txt` im Repository.',
               '',
               '**Installation (English):** close KeePass, copy `FluentTheme.dll` into the `Plugins` folder of KeePass (e.g. `C:\Program Files (x86)\KeePass\Plugins`) and start KeePass. To update, simply replace the existing `FluentTheme.dll`.'
             )
@@ -80,13 +80,17 @@ jobs:
             Write-Host "---- $ver"; Get-Content "notes\$ver.md"
           }
 
-      - name: KeePass installieren (nur als Verweis zum Kompilieren)
+      - name: KeePass installieren (nur als Verweis zum Kompilieren, feste Version)
         if: steps.ver.outputs.build != ''
         shell: pwsh
         run: |
-          choco install keepass -y --no-progress
+          # Feste Version = älteste unterstützte KeePass-Version (REFVER in der Erstellen.bat).
+          # KeePass lädt ein Plugin nur, wenn es gegen dieselbe oder eine ältere Version gebaut wurde.
+          $ref = '2.62.0'
+          choco install keepass --version=$ref -y --no-progress
           $kp = Get-ChildItem 'C:\Program Files*' -Recurse -Filter KeePass.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $kp) { throw 'KeePass.exe nicht gefunden' }
+          if ($kp.VersionInfo.FileVersion -notlike "$ref.*") { throw "Falsche KeePass-Version: $($kp.VersionInfo.FileVersion) statt $ref" }
           "KPEXE=$($kp.FullName)" >> $env:GITHUB_ENV
 
       - name: Fehlende Releases bauen und anlegen

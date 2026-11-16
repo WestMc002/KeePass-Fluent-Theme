@@ -50,6 +50,38 @@ namespace FluentTheme
 			m_dir = dir.Trim().Trim('"');
 		}
 
+		/// <summary>Schutz der echten KeePass-Einstellungen: Der Screenshot-Modus läuft nur, wenn KeePass
+		/// seine Einstellungen aus der Datei neben KeePass.exe nimmt (portable Kopie). Würde KeePass die
+		/// Einstellungen des Benutzers verwenden, wird nichts geändert und der Grund in Fehler.txt notiert.</summary>
+		public static bool UsesLocalConfig(string dir)
+		{
+			string why = null;
+			try
+			{
+				string exe = Application.ExecutablePath;
+				string local = Path.Combine(Path.GetDirectoryName(exe),
+					Path.GetFileNameWithoutExtension(exe) + ".config.xml");
+				if(!File.Exists(local))
+					why = "Neben KeePass.exe liegt keine KeePass.config.xml.";
+				else if(KeePass.Program.Config.Meta.PreferUserConfiguration)
+					why = "In der KeePass.config.xml neben KeePass.exe steht PreferUserConfiguration = true.";
+			}
+			catch(Exception ex) { why = ex.Message; }
+			if(why == null) return true;
+
+			try
+			{
+				string d = (dir ?? string.Empty).Trim().Trim('"');
+				Directory.CreateDirectory(d);
+				File.WriteAllText(Path.Combine(d, "Fehler.txt"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") +
+					Environment.NewLine + "Screenshot-Modus abgebrochen: KeePass würde die Einstellungen des Benutzers " +
+					"verwenden statt die der Screenshot-Kopie. " + why + Environment.NewLine +
+					"Es wurde nichts geändert.", Encoding.UTF8);
+			}
+			catch(Exception) { }
+			return false;
+		}
+
 		/// <summary>Vor dem Start von KeePass: Trigger aus, keine zuletzt geöffnete Datenbank laden,
 		/// keine Update-Prüfung – in der Screenshot-Kopie darf nichts Echtes geöffnet werden.</summary>
 		public static void PrepareConfig()
@@ -409,7 +441,19 @@ namespace FluentTheme
 
 		private void CloseDialog()
 		{
-			if((m_dialog != null) && !m_dialog.IsDisposed) m_dialog.DialogResult = DialogResult.Cancel;
+			if((m_dialog != null) && !m_dialog.IsDisposed)
+			{
+				// Ohne Rückfrage schließen: KeePass fragt sonst unter Umständen „Änderungen speichern?“
+				// und hält damit den Ablauf an (m_bForceClosing wie beim Knopf „Abbrechen“)
+				try
+				{
+					System.Reflection.FieldInfo fi = typeof(PwEntryForm).GetField("m_bForceClosing",
+						System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+					if((fi != null) && (fi.FieldType == typeof(bool))) fi.SetValue(m_dialog, true);
+				}
+				catch(Exception ex) { FluentThemeExt.Report(ex); }
+				m_dialog.DialogResult = DialogResult.Cancel;
+			}
 			m_dialog = null;
 			if(m_db != null) m_db.Modified = false;
 		}

@@ -23,9 +23,14 @@ Installation
 Entfernen: KeePass beenden und FluentTheme.dll aus dem Ordner
 "Plugins" löschen.
 
+Voraussetzung: KeePass 2.62 oder neuer.
+
 Aus dem Quellcode erstellen: Erstellen.bat im Projektordner starten.
 Sie kompiliert das Plugin, sichert das Projekt unter Backup, kopiert
 die DLL in den Plugins-Ordner und startet KeePass danach neu.
+Kompiliert wird gegen die älteste unterstützte KeePass-Version (2.62);
+dafür das portable ZIP dieser Version nach Design\KeePass-Portable
+entpacken.
 
 
 Funktionen

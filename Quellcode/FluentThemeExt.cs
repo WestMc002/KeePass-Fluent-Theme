@@ -116,7 +116,12 @@ namespace FluentTheme
 			string shotDir = null;
 			try { shotDir = KeePass.Program.CommandLineArgs["fluent-screenshots"]; }
 			catch(Exception) { shotDir = null; }
-			if(!string.IsNullOrEmpty(shotDir)) ScreenshotRunner.PrepareConfig();
+			if(!string.IsNullOrEmpty(shotDir))
+			{
+				// Niemals mit den echten Einstellungen des Benutzers: sofort beenden, nichts speichern
+				if(!ScreenshotRunner.UsesLocalConfig(shotDir)) Environment.Exit(1);
+				ScreenshotRunner.PrepareConfig();
+			}
 
 			try
 			{

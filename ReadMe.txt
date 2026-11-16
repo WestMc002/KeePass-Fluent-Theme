@@ -23,9 +23,14 @@ Installation
 Uninstall: close KeePass and delete FluentTheme.dll from the
 "Plugins" folder.
 
+Requirement: KeePass 2.62 or newer.
+
 Building from source: run Erstellen.bat in the project folder.
 It compiles the plugin, backs up the project to Backup, copies the
 DLL to the Plugins folder and restarts KeePass.
+The plugin is compiled against the oldest supported KeePass version
+(2.62); for this, unpack the portable ZIP of that version into
+Design\KeePass-Portable.
 
 
 Features

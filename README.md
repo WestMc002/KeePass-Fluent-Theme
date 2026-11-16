@@ -52,7 +52,7 @@ All settings: **Tools › Fluent Design**.
 2. Copy `FluentTheme.dll` from the [Releases](https://github.com/WestMc002/KeePass-Fluent-Theme/releases) into the `Plugins` folder of KeePass, e.g. `C:\Program Files (x86)\KeePass\Plugins` (administrator rights required).
 3. Start KeePass.
 
-Requirements: KeePass 2.x on Windows 10 or 11 (rounded corners and some details only on Windows 11).
+Requirements: KeePass 2.62 or newer on Windows 10 or 11 (rounded corners and some details only on Windows 11).
 
 Updates: KeePass reports new versions under **Help › Check for Updates** (file `keepass.version`).
 
@@ -65,7 +65,7 @@ Run `Erstellen.bat` in the project folder. It
 - backs up the project to `Backup`,
 - copies the DLL into the Plugins folder and restarts KeePass.
 
-The KeePass path is set in `Erstellen.bat` in the block “Einstellungen” (`KPDIR`).
+The KeePass path is set in `Erstellen.bat` in the block “Einstellungen” (`KPDIR`). The plugin is compiled against the oldest supported KeePass version (`REFVER`, currently 2.62), because KeePass only loads a plugin built against the same or an older version. For this, unpack the portable ZIP of exactly that KeePass version into `Design\KeePass-Portable` (`REFDIR`); the same copy is used for the screenshots.
 
 ---
 
@@ -104,7 +104,7 @@ Alle Einstellungen: **Extras › Fluent-Design**.
 2. `FluentTheme.dll` aus den [Releases](https://github.com/WestMc002/KeePass-Fluent-Theme/releases) in den Ordner `Plugins` von KeePass kopieren, z. B. `C:\Program Files (x86)\KeePass\Plugins` (Administratorrechte nötig).
 3. KeePass starten.
 
-Voraussetzungen: KeePass 2.x unter Windows 10 oder 11 (runde Ecken und einige Details nur unter Windows 11).
+Voraussetzungen: KeePass 2.62 oder neuer unter Windows 10 oder 11 (runde Ecken und einige Details nur unter Windows 11).
 
 Updates: KeePass meldet neue Versionen unter **Hilfe › Nach Updates suchen** (Datei `keepass.version`).
 
@@ -117,7 +117,7 @@ Updates: KeePass meldet neue Versionen unter **Hilfe › Nach Updates suchen** (
 - sichert das Projekt unter `Backup`,
 - kopiert die DLL in den Plugins-Ordner und startet KeePass neu.
 
-Der KeePass-Pfad ist in der `Erstellen.bat` im Block „Einstellungen“ hinterlegt (`KPDIR`).
+Der KeePass-Pfad ist in der `Erstellen.bat` im Block „Einstellungen“ hinterlegt (`KPDIR`). Kompiliert wird gegen die älteste unterstützte KeePass-Version (`REFVER`, derzeit 2.62), weil KeePass ein Plugin nur lädt, wenn es gegen dieselbe oder eine ältere Version gebaut wurde. Dafür das portable ZIP genau dieser KeePass-Version nach `Design\KeePass-Portable` entpacken (`REFDIR`); dieselbe Kopie dient auch für die Screenshots.
 
 ---
 
