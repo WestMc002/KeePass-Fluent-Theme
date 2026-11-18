@@ -460,7 +460,7 @@ namespace FluentTheme
 		private int m_editSetLeft = -1;    // Lage, die zuletzt hier gesetzt wurde
 
 		/// <summary>Platz für die Lupe links im Suchfeld.</summary>
-		private int SearchIconWidth { get { return D(22); } }
+		private int SearchIconWidth { get { return D(18) - 1; } }
 
 		private bool HasText()
 		{
@@ -680,8 +680,11 @@ namespace FluentTheme
 					{
 						// Schwarz = unverändert, Weiß = invertiert (sichtbarer Strich)
 						g.Clear(Color.Black);
-						int top = (int)Math.Round(line * 0.17);
-						int bottom = (int)Math.Round(line * 0.87);
+						// Strich um 1 (× Skalierung) nach unten versetzt: Das Textfeld sitzt um diesen Betrag
+						// über der Feldmitte (siehe CenterEdit), der Strich soll in der Feldmitte bleiben
+						int off = D(1);
+						int top = (int)Math.Round(line * 0.17) + off;
+						int bottom = Math.Min(line, (int)Math.Round(line * 0.87) + off);
 						using(SolidBrush br = new SolidBrush(Color.White))
 							g.FillRectangle(br, 0, top, w, Math.Max(1, bottom - top));
 						m_caretBmp = b.GetHbitmap();
@@ -753,7 +756,9 @@ namespace FluentTheme
 				if(er.IsEmpty) return;
 				// Höhe auf eine Textzeile begrenzen (das Textfeld schreibt immer oben in sein Fenster)
 				int h = Math.Min(er.Height, m_cb.Font.Height + D(2));
-				int top = (m_cb.ClientSize.Height - h) / 2;
+				// 1 (× Skalierung) höher als die rechnerische Mitte: Über den Buchstaben lässt die Schrift mehr
+				// Leerraum als darunter, die Schrift säße sonst sichtbar zu tief
+				int top = Math.Max(0, (m_cb.ClientSize.Height - h) / 2 - D(1));
 				// Links Platz für die Lupe (immer, damit der Text beim Tippen nicht springt). Hat Windows
 				// das Textfeld selbst neu gesetzt, gilt dessen Lage als Ausgangspunkt.
 				if((m_editBaseLeft < 0) || (er.Left != m_editSetLeft)) m_editBaseLeft = er.Left;
@@ -811,7 +816,7 @@ namespace FluentTheme
 					// Kreis plus Griff zusammen senkrecht mittig: Mitte des ganzen Symbols = Mitte des Feldes
 					float r = 4.2f * m_s, grip = 3.6f * m_s;
 					float below = r * 0.7071f + grip;   // Ausdehnung unter dem Kreismittelpunkt
-					float cx = m_editBaseLeft + D(10);
+					float cx = m_editBaseLeft + D(8);
 					float cy = (float)Math.Round(cr.Top + (cr.Height - 1) / 2f - (below - r) / 2f);
 					System.Drawing.Drawing2D.SmoothingMode sm0 = g.SmoothingMode;
 					g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
