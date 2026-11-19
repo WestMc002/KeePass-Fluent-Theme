@@ -26,6 +26,7 @@ namespace FluentTheme
 		private readonly Dictionary<TabControl, TabStripPainter> m_tabs = new Dictionary<TabControl, TabStripPainter>();
 		private readonly Dictionary<Control, QualityBarPainter> m_qbars = new Dictionary<Control, QualityBarPainter>();
 		private readonly Dictionary<Control, EditFramePainter> m_frames = new Dictionary<Control, EditFramePainter>();
+		private readonly Dictionary<ListView, HeaderTextFix> m_headers = new Dictionary<ListView, HeaderTextFix>();
 		private readonly HashSet<Control> m_hookedContainers = new HashSet<Control>();
 		private readonly HashSet<TabPage> m_cardPages = new HashSet<TabPage>();
 		private readonly HashSet<Form> m_alignHooked = new HashSet<Form>();
@@ -84,6 +85,8 @@ namespace FluentTheme
 			m_qbars.Clear();
 			foreach(EditFramePainter fp in m_frames.Values) fp.Detach();
 			m_frames.Clear();
+			foreach(HeaderTextFix hf in m_headers.Values) hf.Detach();
+			m_headers.Clear();
 		}
 
 		public void Update(Palette p, float scale)
@@ -177,6 +180,15 @@ namespace FluentTheme
 			c.Disposed += delegate { m_hookedContainers.Remove(c); };
 		}
 
+		private void OnHeaderListDisposed(object sender, EventArgs e)
+		{
+			ListView lv = (sender as ListView);
+			if(lv == null) return;
+			lv.Disposed -= OnHeaderListDisposed;
+			HeaderTextFix hf;
+			if(m_headers.TryGetValue(lv, out hf)) { hf.Detach(); m_headers.Remove(lv); }
+		}
+
 		private void ThemeNative(Control c, string darkTheme, string lightTheme)
 		{
 			if(c.IsHandleCreated) NativeMethods.ThemeControl(c, m_p.Dark, darkTheme, lightTheme);
@@ -264,6 +276,28 @@ namespace FluentTheme
 					ThemeNative(c, "DarkMode_Explorer", "Explorer");
 					if(lv.IsHandleCreated)
 						NativeMethods.ThemeHandle(NativeMethods.GetListHeader(lv), p.Dark, "DarkMode_ItemsView", "ItemsView");
+					// Spaltenköpfe und Gruppenüberschriften: Windows schreibt sie auch im dunklen Design
+					// schwarz bzw. dunkelblau
+					HeaderTextFix hf;
+					if(!m_headers.TryGetValue(lv, out hf))
+					{
+						hf = new HeaderTextFix(lv);
+						m_headers[lv] = hf;
+						lv.Disposed += OnHeaderListDisposed;
+					}
+					hf.Update(p.Text, p.Sub, p.Card, p.Dark);
+				}
+				else if(c is DataGridView)
+				{
+					// Parameter-Tabelle der Trigger: KeePass übernimmt beim Füllen diese Farben
+					DataGridView dg = (DataGridView)c;
+					dg.ForeColor = p.Text;
+					dg.BackgroundColor = p.Card;
+					dg.GridColor = p.Card;
+					dg.DefaultCellStyle.BackColor = p.Card;
+					dg.DefaultCellStyle.ForeColor = p.Text;
+					dg.DefaultCellStyle.SelectionBackColor = p.Card;
+					dg.DefaultCellStyle.SelectionForeColor = p.Text;
 				}
 				else if(c is TreeView)
 				{
@@ -353,7 +387,7 @@ namespace FluentTheme
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 
-			if((c.Controls.Count > 0) && !(c is NumericUpDown) && !(c is UserControl && c.GetType().Namespace == "System.Windows.Forms"))
+			if((c.Controls.Count > 0) && !(c is NumericUpDown) && !(c is DataGridView) && !(c is UserControl && c.GetType().Namespace == "System.Windows.Forms"))
 			{
 				foreach(Control child in c.Controls) ApplyControl(child, f);
 			}

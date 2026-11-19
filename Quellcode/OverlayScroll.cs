@@ -42,6 +42,7 @@ namespace FluentTheme
 		private const int SB_PAGEUP = 2;
 		private const int SB_PAGEDOWN = 3;
 		private const int SB_THUMBPOSITION = 4;
+		private const int SB_THUMBTRACK = 5;
 		private const int SB_ENDSCROLL = 8;
 		private const int LVM_SCROLL = 0x1014;
 
@@ -279,9 +280,20 @@ namespace FluentTheme
 				int dy = (pos - cur.nPos) * rowH;
 				SendMessage(lv.Handle, LVM_SCROLL, IntPtr.Zero, new IntPtr(dy));
 			}
+			else if((m_target is TreeView) && !horz)
+			{
+				// Der Baum zählt senkrecht in Zeilen. Die Position aus der Scroll-Nachricht beachtet er
+				// nicht (er fragt die echte Scrollleiste, die hier niemand zieht) – deshalb den Knoten
+				// dieser Zeile direkt nach oben setzen.
+				TreeView tv = (TreeView)m_target;
+				TreeNode n = ((tv.Nodes.Count > 0) ? tv.Nodes[0] : null);
+				for(int i = cur.nMin; (i < pos) && (n != null); ++i) n = n.NextVisibleNode;
+				if(n != null) tv.TopNode = n;
+			}
 			else
 			{
 				int msg = (horz ? WM_HSCROLL : WM_VSCROLL);
+				SendMessage(m_target.Handle, msg, new IntPtr((pos << 16) | SB_THUMBTRACK), IntPtr.Zero);
 				SendMessage(m_target.Handle, msg, new IntPtr((pos << 16) | SB_THUMBPOSITION), IntPtr.Zero);
 				SendMessage(m_target.Handle, msg, new IntPtr(SB_ENDSCROLL), IntPtr.Zero);
 			}

@@ -6,6 +6,10 @@
 # Ausloeser: Änderung von keepass.version oder dieser Datei auf main, Hand-Start über "Run workflow".
 # Release-Text: oben "Änderungen" = Zeilen mit "- " aus dem neuesten Commit, dessen
 # Text die Version nennt (Commit "KeePass Fluent Theme <Version> – Änderungen"), darunter die Installation.
+# Stehen im Commit nach einer Zeile "Changes:" weitere Zeilen mit "- ", erscheinen sie als
+# englischer Abschnitt "Changes" unter den Änderungen.
+# Anhänge: FluentTheme.dll und zusätzlich ein ZIP mit DLL, Liesmich.txt und ReadMe.txt
+# (Browser blockieren einzelne DLL-Dateien häufiger als ein ZIP).
 
 name: Release
 
@@ -55,26 +59,48 @@ jobs:
         run: |
           [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()   # Umlaute aus git richtig lesen
           New-Item -ItemType Directory -Path 'notes' -Force | Out-Null
-          $all = @('${{ steps.ver.outputs.build }}' -split ' ' | Where-Object { $_ } | ForEach-Object { $_.Split('=')[0] }) +
-            @('${{ steps.ver.outputs.refresh }}' -split ' ' | Where-Object { $_ })
+          $new = @('${{ steps.ver.outputs.build }}' -split ' ' | Where-Object { $_ } | ForEach-Object { $_.Split('=')[0] })
+          $all = $new + @('${{ steps.ver.outputs.refresh }}' -split ' ' | Where-Object { $_ })
           foreach ($ver in $all) {
             # "Änderungen" = Zeilen mit "- " aus dem neuesten Commit, dessen Text die Version nennt
             $sha = git log --format=%H -F --grep="$ver" -n 1
             if (-not $sha) { $sha = git rev-parse HEAD }
             $body = git log -1 --format=%b $sha
-            $items = @($body -split "`r?`n" | Where-Object { $_ -match '^\s*[-*] ' } | ForEach-Object { '- ' + ($_.Trim() -replace '^[-*]\s+', '') })
+            # Zeilen nach "Changes:" sind die englische Fassung
+            $items = @(); $itemsEn = @(); $en = $false
+            foreach ($l in ($body -split "`r?`n")) {
+              if ($l -match '^\s*Changes\s*:?\s*$') { $en = $true; continue }
+              if ($l -notmatch '^\s*[-*] ') { continue }
+              $t = '- ' + ($l.Trim() -replace '^[-*]\s+', '')
+              if ($en) { $itemsEn += $t } else { $items += $t }
+            }
             if ($items.Count -eq 0) { $items = @('- siehe Liesmich.txt im Repository') }
-            $lines = @('## Änderungen', '') + $items + @(
+            $changes = @()
+            if ($itemsEn.Count -gt 0) { $changes = @('', '## Changes', '') + $itemsEn }
+            # ZIP gibt es bei neuen Releases immer, bei vorhandenen nur, wenn es angehängt ist
+            $zip = ($new -contains $ver)
+            if (-not $zip) {
+              $assets = @(gh release view "v$ver" --json assets --jq '.assets[].name')
+              $zip = [bool]($assets | Where-Object { $_ -like '*.zip' })
+            }
+            $step1 = '1. `FluentTheme.dll` herunterladen.'
+            $stepEn = 'close KeePass, copy `FluentTheme.dll`'
+            if ($zip) {
+              $step1 = "1. ``KeePass-Fluent-Theme-$ver.zip`` herunterladen und entpacken (oder nur ``FluentTheme.dll`` herunterladen)."
+              $stepEn = "download and extract ``KeePass-Fluent-Theme-$ver.zip`` (or download only ``FluentTheme.dll``), close KeePass, copy ``FluentTheme.dll``"
+            }
+            $lineEn = "**Installation (English):** $stepEn into the ``Plugins`` folder of KeePass (e.g. ``C:\Program Files (x86)\KeePass\Plugins``) and start KeePass. To update, simply replace the existing ``FluentTheme.dll``."
+            $lines = @('## Änderungen', '') + $items + $changes + @(
               '',
               '## Installation',
               '',
-              '1. `FluentTheme.dll` herunterladen.',
+              $step1,
               '2. KeePass beenden und die DLL in den Ordner `Plugins` von KeePass kopieren, z. B. `C:\Program Files (x86)\KeePass\Plugins`. Bei einem Update die vorhandene `FluentTheme.dll` einfach ersetzen.',
               '3. KeePass starten. Das Design passt sich automatisch an hell/dunkel und die Windows-Akzentfarbe an; Einstellungen unter Extras › Fluent-Design.',
               '',
               'Voraussetzung: KeePass 2.62 oder neuer unter Windows 10 oder 11 (runde Ecken und einige Details nur unter Windows 11). Ausführliche Beschreibung: README und `Liesmich.txt` im Repository.',
               '',
-              '**Installation (English):** close KeePass, copy `FluentTheme.dll` into the `Plugins` folder of KeePass (e.g. `C:\Program Files (x86)\KeePass\Plugins`) and start KeePass. To update, simply replace the existing `FluentTheme.dll`.'
+              $lineEn
             )
             $lines | Set-Content -Path "notes\$ver.md" -Encoding utf8   # pwsh 7: UTF-8 ohne BOM
             Write-Host "---- $ver"; Get-Content "notes\$ver.md"
@@ -123,13 +149,19 @@ jobs:
               "/r:$env:KPEXE" "$wt\Quellcode\*.cs"
             if ($LASTEXITCODE -ne 0) { throw "Kompilieren von v$ver fehlgeschlagen" }
             (Get-Item "$out\FluentTheme.dll").VersionInfo.FileVersion
-            gh release create "v$ver" "$out\FluentTheme.dll" --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $sha
+            # ZIP mit DLL und den beiden Beschreibungen
+            $zipFile = "$out\KeePass-Fluent-Theme-$ver.zip"
+            $zipIn = @("$out\FluentTheme.dll")
+            foreach ($doc in @('Liesmich.txt', 'ReadMe.txt')) { if (Test-Path "$wt\$doc") { $zipIn += "$wt\$doc" } }
+            Compress-Archive -Path $zipIn -DestinationPath $zipFile -Force
+            if (-not (Test-Path $zipFile)) { throw "ZIP für v$ver konnte nicht erstellt werden" }
+            gh release create "v$ver" "$out\FluentTheme.dll" $zipFile --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $sha
             if ($LASTEXITCODE -ne 0) {
               # Ältere Stände enthalten eine frühere Fassung dieses Workflows; dort darf das
               # Actions-Token keinen Tag anlegen (HTTP 403). Dann den Tag auf den aktuellen
               # Stand setzen - die DLL bleibt die aus dem Stand dieser Version.
               Write-Host "Tag auf $sha nicht erlaubt - Tag auf aktuellen Stand"
-              gh release create "v$ver" "$out\FluentTheme.dll" --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $env:GITHUB_SHA
+              gh release create "v$ver" "$out\FluentTheme.dll" $zipFile --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $env:GITHUB_SHA
               if ($LASTEXITCODE -ne 0) { throw "Release v$ver konnte nicht angelegt werden" }
             }
           }
