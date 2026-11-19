@@ -285,7 +285,7 @@ namespace FluentTheme
 						m_headers[lv] = hf;
 						lv.Disposed += OnHeaderListDisposed;
 					}
-					hf.Update(p.Text, p.Sub, p.Card, p.Dark);
+					hf.Update(p.Text, p.Sub, p.Card, p.Border, p.Dark);
 				}
 				else if(c is DataGridView)
 				{

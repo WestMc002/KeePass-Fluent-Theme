@@ -11,21 +11,24 @@ using System.Windows.Forms;
 
 namespace FluentTheme
 {
-	/// <summary>Listen in Dialogen im dunklen Design: Windows zeichnet Spaltenköpfe und
-	/// Gruppenüberschriften zwar auf dunklem Grund, die Schrift aber weiterhin schwarz bzw. dunkelblau.
-	/// Bei den Spaltenköpfen wird nur die Schriftfarbe vorgegeben, die Gruppenüberschriften werden
-	/// selbst gezeichnet (grau, halbfett – wie in der Eintragsliste). Im hellen Design und bei Listen,
-	/// die sich selbst zeichnen (OwnerDraw), bleibt alles bei Windows.</summary>
+	/// <summary>Listen in Dialogen im dunklen Design: Windows schreibt Spaltenköpfe schwarz und
+	/// Gruppenüberschriften dunkelblau; ob der Spaltenkopf dabei dunkel oder weiß hinterlegt ist, hängt
+	/// von der Windows-Version ab. Deshalb werden Spaltenköpfe (Grund, Schrift, Trennstrich,
+	/// Sortierpfeil) und Gruppenüberschriften hier vollständig selbst gezeichnet. Im hellen Design und
+	/// bei Listen, die sich selbst zeichnen (OwnerDraw), bleibt alles bei Windows.</summary>
 	internal sealed class HeaderTextFix : NativeWindow
 	{
 		private const int WM_NOTIFY = 0x004E;
 		private const int WM_REFLECT_NOTIFY = 0x204E; // von WinForms an die Liste zurückgereichtes WM_NOTIFY
 		private const int NM_CUSTOMDRAW = -12;
 		private const int CDDS_PREPAINT = 0x00000001;
+		private const int CDDS_POSTPAINT = 0x00000002;
 		private const int CDDS_ITEMPREPAINT = 0x00010001;
 		private const int CDRF_DODEFAULT = 0x00000000;
 		private const int CDRF_SKIPDEFAULT = 0x00000004;
+		private const int CDRF_NOTIFYPOSTPAINT = 0x00000010;
 		private const int CDRF_NOTIFYITEMDRAW = 0x00000020;
+		private const int HDM_GETITEMRECT = 0x1207;
 		private const int LVCDI_GROUP = 0x0001;
 		private const int LVM_GETGROUPRECT = 0x1062;
 		private const int LVGGR_HEADER = 1;
@@ -66,8 +69,8 @@ namespace FluentTheme
 			public int dwItemType;
 		}
 
-		[DllImport("gdi32.dll")]
-		private static extern int SetTextColor(IntPtr hdc, int crColor);
+		[DllImport("user32.dll")]
+		private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
 
 		[DllImport("user32.dll")]
 		private static extern bool InvalidateRect(IntPtr hWnd, IntPtr lpRect, bool bErase);
@@ -82,6 +85,7 @@ namespace FluentTheme
 		private Color m_text = Color.White;
 		private Color m_sub = Color.Silver;
 		private Color m_back = Color.Black;
+		private Color m_line = Color.Gray;
 
 		public HeaderTextFix(ListView lv)
 		{
@@ -91,11 +95,12 @@ namespace FluentTheme
 		}
 
 		/// <summary>Farben setzen; aktiv nur im dunklen Design.</summary>
-		public void Update(Color text, Color sub, Color back, bool dark)
+		public void Update(Color text, Color sub, Color back, Color line, bool dark)
 		{
 			m_text = text;
 			m_sub = sub;
 			m_back = back;
+			m_line = line;
 			m_on = dark;
 			try
 			{
@@ -142,22 +147,77 @@ namespace FluentTheme
 			base.WndProc(ref m);
 		}
 
-		/// <summary>Spaltenkopf: nur die Schriftfarbe vorgeben, den Rest zeichnet Windows.</summary>
+		/// <summary>Spaltenkopf vollständig selbst zeichnen: Grund, Schrift, Trennstrich und Sortierpfeil.
+		/// Die Fläche rechts neben der letzten Spalte wird nach dem Zeichnen von Windows übermalt.</summary>
 		private bool HeaderText(ref Message m)
 		{
 			NMHDR nh = (NMHDR)Marshal.PtrToStructure(m.LParam, typeof(NMHDR));
 			if((nh.code != NM_CUSTOMDRAW) || (nh.hwndFrom == IntPtr.Zero)) return false;
-			if(nh.hwndFrom != NativeMethods.GetListHeader(m_lv)) return false;
+			IntPtr hdr = NativeMethods.GetListHeader(m_lv);
+			if(nh.hwndFrom != hdr) return false;
 
 			NMCUSTOMDRAW cd = (NMCUSTOMDRAW)Marshal.PtrToStructure(m.LParam, typeof(NMCUSTOMDRAW));
+			if(cd.hdc == IntPtr.Zero) return false;
 			if(cd.dwDrawStage == CDDS_PREPAINT)
 			{
-				m.Result = new IntPtr(CDRF_NOTIFYITEMDRAW);
+				m.Result = new IntPtr(CDRF_NOTIFYITEMDRAW | CDRF_NOTIFYPOSTPAINT);
 				return true;
 			}
 			if(cd.dwDrawStage == CDDS_ITEMPREPAINT)
 			{
-				SetTextColor(cd.hdc, (m_text.B << 16) | (m_text.G << 8) | m_text.R);
+				int index = (int)cd.dwItemSpec.ToUInt32();
+				Rectangle rc = Rectangle.FromLTRB(cd.rc.Left, cd.rc.Top, cd.rc.Right, cd.rc.Bottom);
+				if((rc.Width <= 0) || (rc.Height <= 0)) return false;
+				ColumnHeader ch = (((index >= 0) && (index < m_lv.Columns.Count)) ? m_lv.Columns[index] : null);
+				string text = ((ch != null) ? ch.Text : string.Empty);
+				HorizontalAlignment al = ((ch != null) ? ch.TextAlign : HorizontalAlignment.Left);
+
+				using(Graphics g = Graphics.FromHdc(cd.hdc))
+				{
+					float k = g.DpiX / 96f;
+					int pad = (int)Math.Round(6 * k);
+					using(SolidBrush b = new SolidBrush(m_back)) { g.FillRectangle(b, rc); }
+					using(Pen pen = new Pen(m_line))
+					{
+						int inset = (int)Math.Round(4 * k);
+						g.DrawLine(pen, rc.Right - 1, rc.Top + inset, rc.Right - 1, rc.Bottom - 1 - inset);
+						g.DrawLine(pen, rc.Left, rc.Bottom - 1, rc.Right, rc.Bottom - 1);
+					}
+
+					int sort = NativeMethods.GetHeaderSort(hdr, index);
+					int arrow = ((sort != 0) ? (int)Math.Round(14 * k) : 0);
+					Rectangle tr = Rectangle.FromLTRB(rc.Left + pad, rc.Top, Math.Max(rc.Left + pad, rc.Right - pad - arrow), rc.Bottom - 1);
+					TextFormatFlags tf = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+						TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+					if(al == HorizontalAlignment.Right) tf |= TextFormatFlags.Right;
+					else if(al == HorizontalAlignment.Center) tf |= TextFormatFlags.HorizontalCenter;
+					TextRenderer.DrawText(g, text, m_lv.Font, tr, m_text, tf);
+					if(sort != 0)
+						Gfx.Chevron(g, rc.Right - pad - arrow / 2f, rc.Top + rc.Height / 2f, 7f * k, sort > 0, m_sub,
+							Math.Max(1f, 1.2f * k));
+				}
+				m.Result = new IntPtr(CDRF_SKIPDEFAULT);
+				return true;
+			}
+			if(cd.dwDrawStage == CDDS_POSTPAINT)
+			{
+				// Rest rechts neben der letzten Spalte
+				RECT all;
+				if(!GetClientRect(hdr, out all)) return false;
+				int right = 0;
+				for(int i = 0; i < m_lv.Columns.Count; ++i)
+				{
+					RECT ir = new RECT();
+					if(SendRect(hdr, HDM_GETITEMRECT, new IntPtr(i), ref ir) != IntPtr.Zero) right = Math.Max(right, ir.Right);
+				}
+				if(right < all.Right)
+				{
+					using(Graphics g = Graphics.FromHdc(cd.hdc))
+					{
+						using(SolidBrush b = new SolidBrush(m_back)) { g.FillRectangle(b, right, all.Top, all.Right - right, all.Bottom - all.Top); }
+						using(Pen pen = new Pen(m_line)) { g.DrawLine(pen, right, all.Bottom - 1, all.Right, all.Bottom - 1); }
+					}
+				}
 				m.Result = new IntPtr(CDRF_DODEFAULT);
 				return true;
 			}
