@@ -33,6 +33,7 @@ namespace FluentTheme
 		private const string CfgColumns = "FluentTheme.DetailsColumns";
 		private const string CfgExpiryDays = "FluentTheme.ExpiryWarnDays";
 		private const string CfgShowVersion = "FluentTheme.ShowVersion";
+		private const string CfgMoreLinks = "FluentTheme.FieldLinksMoreSchemes";
 
 		private static string s_lastError;
 		private static string s_toolbarInfo = string.Empty;
@@ -307,6 +308,12 @@ namespace FluentTheme
 			return (int)Math.Round(v * m_s);
 		}
 
+		/// <summary>Zusatzfelder: auch andere Protokolle als http/https anklickbar (Standard: aus).</summary>
+		private bool MoreLinks
+		{
+			get { return m_host.CustomConfig.GetBool(CfgMoreLinks, false); }
+		}
+
 		private bool ListHover
 		{
 			get { return m_host.CustomConfig.GetBool(CfgHover, true); }
@@ -410,6 +417,7 @@ namespace FluentTheme
 				{
 					m_details.SetPalette(m_p, m_s);
 					m_details.RevealSeconds = this.RevealSeconds;
+					m_details.MoreLinks = this.MoreLinks;
 					m_details.Visible = this.ModernDetails;
 					if(m_details.Visible) m_details.BringToFront();
 					m_details.RefreshIfChanged(true);
@@ -1054,6 +1062,14 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miAutoH);
 
+			ToolStripMenuItem miLinks = new ToolStripMenuItem(L.T("Weitere Protokolle in Zusatzfeldern anklickbar (ftp, ssh …)"));
+			miLinks.Click += delegate
+			{
+				m_host.CustomConfig.SetBool(CfgMoreLinks, !this.MoreLinks);
+				ApplyAll();
+			};
+			root.DropDownItems.Add(miLinks);
+
 			ToolStripMenuItem miReveal = new ToolStripMenuItem(L.T("Angezeigtes Passwort wieder verbergen"));
 			List<ToolStripMenuItem> revealItems = new List<ToolStripMenuItem>();
 			foreach(int sec in new int[] { 10, 15, 30, 60, 0 })
@@ -1160,6 +1176,8 @@ namespace FluentTheme
 				foreach(ToolStripMenuItem mi in revealItems) mi.Checked = ((int)mi.Tag == rs);
 				miReveal.Enabled = this.ModernDetails;
 				miAutoH.Enabled = this.ModernDetails;
+				miLinks.Checked = this.MoreLinks;
+				miLinks.Enabled = this.ModernDetails;
 				miHover.Checked = this.ListHover;
 				int ed = this.ExpiryDays;
 				foreach(ToolStripMenuItem mi in expiryItems) mi.Checked = ((int)mi.Tag == ed);

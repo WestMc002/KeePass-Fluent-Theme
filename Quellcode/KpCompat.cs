@@ -89,28 +89,25 @@ namespace FluentTheme
 			return args;
 		}
 
-		/// <summary>Kopiert wie KeePass selbst (Platzhalter, Auto-Löschen der Zwischenablage).</summary>
-		public static void Copy(IPluginHost host, ProtectedString ps, PwEntry pe)
+		/// <summary>Kopiert wie KeePass selbst (Platzhalter, Auto-Löschen der Zwischenablage).
+		/// Rückgabe false: KeePass konnte das Kopieren nicht übernehmen. Dann schreibt das Plugin
+		/// nichts selbst in die Zwischenablage – ein Geheimnis läge dort sonst ohne Löschfrist.</summary>
+		public static bool Copy(IPluginHost host, ProtectedString ps, PwEntry pe)
 		{
-			if(ps == null) return;
-			bool done = false;
+			if(ps == null) return false;
 			try
 			{
 				Type t = KpAsm.GetType("KeePass.Util.ClipboardUtil");
 				MethodInfo mi = FindStatic(t, "CopyAndMinimize", typeof(ProtectedString));
 				if(mi == null) mi = FindStatic(t, "Copy", typeof(ProtectedString));
-				if(mi != null)
-				{
-					mi.Invoke(null, BuildArgs(mi, host, ps, ps.ReadString(), pe));
-					done = true;
-				}
+				if(mi == null) return false;
+				object res = mi.Invoke(null, BuildArgs(mi, host, ps, null, pe));
+				if((res is bool) && !(bool)res) return false;
 			}
-			catch(Exception ex) { FluentThemeExt.Report(ex); }
-
-			if(!done)
+			catch(Exception ex)
 			{
-				string s = ps.ReadString();
-				if(s.Length > 0) Clipboard.SetText(s);
+				FluentThemeExt.Report(ex);
+				return false;
 			}
 
 			try
@@ -118,14 +115,24 @@ namespace FluentTheme
 				MethodInfo sc = host.MainWindow.GetType().GetMethod("StartClipboardCountdown",
 					BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
 					Type.EmptyTypes, null);
-				if(sc != null) sc.Invoke(host.MainWindow, null);
+				if(sc != null)
+				{
+					sc.Invoke(host.MainWindow, null);
+					return true;
+				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
+
+			// Die Löschfrist von KeePass ließ sich nicht starten: lieber sofort leeren als liegen lassen
+			try { Clipboard.Clear(); }
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+			return false;
 		}
 
-		public static void OpenEntryUrl(IPluginHost host, PwEntry pe)
+		/// <summary>Öffnet die URL des Eintrags über KeePass. Rückgabe false: nicht möglich.</summary>
+		public static bool OpenEntryUrl(IPluginHost host, PwEntry pe)
 		{
-			if(pe == null) return;
+			if(pe == null) return false;
 			try
 			{
 				Type t = KpAsm.GetType("KeePass.Util.WinUtil");
@@ -134,17 +141,20 @@ namespace FluentTheme
 				if(mi != null)
 				{
 					mi.Invoke(null, BuildArgs(mi, host, null, null, pe));
-					return;
+					return true;
 				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 
-			OpenUrl(host, pe.Strings.ReadSafe(PwDefs.UrlField), pe);
+			return OpenUrl(host, pe.Strings.ReadSafe(PwDefs.UrlField), pe);
 		}
 
-		public static void OpenUrl(IPluginHost host, string url, PwEntry pe)
+		/// <summary>Öffnet eine Adresse ausschließlich über KeePass (URL-Überschreibungen, Platzhalter).
+		/// Es gibt bewusst keinen eigenen Start über Windows: Der Inhalt eines Eintrags soll nie
+		/// ungeprüft als Programm oder Protokoll-Aufruf ausgeführt werden. Rückgabe false: nicht möglich.</summary>
+		public static bool OpenUrl(IPluginHost host, string url, PwEntry pe)
 		{
-			if(string.IsNullOrEmpty(url)) return;
+			if(string.IsNullOrEmpty(url)) return false;
 			try
 			{
 				Type t = KpAsm.GetType("KeePass.Util.WinUtil");
@@ -155,13 +165,11 @@ namespace FluentTheme
 				if(mi != null)
 				{
 					mi.Invoke(null, BuildArgs(mi, host, null, url, pe));
-					return;
+					return true;
 				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
-
-			try { Process.Start(url); }
-			catch(Exception ex) { FluentThemeExt.Report(ex); }
+			return false;
 		}
 
 		/// <summary>Nach wie vielen Sekunden KeePass die Zwischenablage leert
@@ -299,9 +307,11 @@ namespace FluentTheme
 			return false;
 		}
 
-		public static int EstimateBits(string pw)
+		/// <summary>Passwortstärke in Bit nach der Bewertung von KeePass. −1: Bewertung nicht verfügbar
+		/// (es gibt bewusst keine eigene Ersatzrechnung – sie würde schwache Passwörter stark nennen).</summary>
+		public static int EstimateBits(char[] pw)
 		{
-			if(string.IsNullOrEmpty(pw)) return 0;
+			if((pw == null) || (pw.Length == 0)) return 0;
 			try
 			{
 				Type t = typeof(PwEntry).Assembly.GetType("KeePassLib.Cryptography.QualityEstimation");
@@ -311,17 +321,13 @@ namespace FluentTheme
 					{
 						if(mi.Name != "EstimatePasswordBits") continue;
 						ParameterInfo[] pars = mi.GetParameters();
-						if(pars.Length != 1) continue;
-						object arg = null;
-						if(pars[0].ParameterType == typeof(char[])) arg = pw.ToCharArray();
-						else if(pars[0].ParameterType == typeof(string)) arg = pw;
-						else continue;
-						return Convert.ToInt32(mi.Invoke(null, new object[] { arg }));
+						if((pars.Length != 1) || (pars[0].ParameterType != typeof(char[]))) continue;
+						return Convert.ToInt32(mi.Invoke(null, new object[] { pw }));
 					}
 				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
-			return pw.Length * 4;
+			return -1;
 		}
 	}
 }

@@ -84,6 +84,8 @@ All settings are in the menu Tools > Fluent Design:
 - Row height of the entry list (24, 28 or 32 pixels)
 - Modern entry details (off = standard KeePass view)
 - Adjust height of entry details automatically
+- More protocols clickable in additional fields (ftp, ssh …; default: off –
+  then only http, https and www are clickable)
 - Hide revealed password again (10, 15, 30, 60 seconds or never)
 - Hover effect in the entry list and group tree
 - Highlight expiring entries (7, 14, 30 days before or expired only)

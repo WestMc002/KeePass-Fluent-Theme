@@ -84,6 +84,8 @@ Alle Einstellungen stehen im Menü Extras > Fluent-Design:
 - Zeilenhöhe der Eintragsliste (24, 28 oder 32 Pixel)
 - Moderne Detailansicht (aus = KeePass-Standardansicht)
 - Höhe der Detailansicht automatisch anpassen
+- Weitere Protokolle in Zusatzfeldern anklickbar (ftp, ssh …; Standard: aus –
+  dann sind nur http, https und www anklickbar)
 - Angezeigtes Passwort wieder verbergen (10, 15, 30, 60 Sekunden oder nie)
 - Hover-Effekt in Eintragsliste und Gruppenbaum
 - Ablaufende Einträge hervorheben (7, 14, 30 Tage vorher oder nur abgelaufene)

@@ -155,6 +155,15 @@ namespace FluentTheme
 			if(!m_attached || (m_p == null)) return;
 
 			if(!m_lv.OwnerDraw) m_lv.OwnerDraw = true;
+			// Andere Plugins können sich ebenfalls ins Zeichnen der Liste einhängen und dort Windows
+			// zeichnen lassen. Die eigenen Behandler deshalb ans Ende der Reihe stellen – der letzte
+			// entscheidet, ob Windows zeichnet.
+			m_lv.DrawColumnHeader -= OnDrawColumnHeader;
+			m_lv.DrawItem -= OnDrawItem;
+			m_lv.DrawSubItem -= OnDrawSubItem;
+			m_lv.DrawColumnHeader += OnDrawColumnHeader;
+			m_lv.DrawItem += OnDrawItem;
+			m_lv.DrawSubItem += OnDrawSubItem;
 			if(m_lv.BackColor != m_p.Pane) m_lv.BackColor = m_p.Pane;
 			if(m_lv.GridLines) m_lv.GridLines = false;
 
@@ -246,6 +255,9 @@ namespace FluentTheme
 					Gfx.Chevron(g, ax, r.Top + r.Height / 2f, 7f * m_s, sort > 0, m_p.Sub,
 						Math.Max(1f, 1.2f * m_s));
 				}
+				// Ausdrücklich setzen: Ein anderes Plugin kann vorher „Windows zeichnet“ verlangt haben,
+				// dann stünde der Kopf im dunklen Design mit schwarzer Schrift da
+				e.DrawDefault = false;
 			}
 			catch(Exception ex)
 			{
@@ -261,14 +273,24 @@ namespace FluentTheme
 			// darüber. Nur dort reicht nicht – in der Gruppenansicht (Suchergebnisse) zeichnet
 			// Windows beim Überfahren manchmal nur diesen Schritt neu, die Zeile bliebe leer.
 			if((m_p == null) || (m_lv.View != View.Details)) { e.DrawDefault = true; return; }
-			if(!PaintRow(e.Graphics, e.Item, e.ItemIndex)) e.DrawDefault = true;
+			// Immer ausdrücklich setzen (siehe OnDrawColumnHeader)
+			e.DrawDefault = !PaintRow(e.Graphics, e.Item, e.ItemIndex);
 		}
+
+		private bool m_rowDefault; // Zeile konnte nicht gezeichnet werden: Windows zeichnet alle Spalten
 
 		private void OnDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
 		{
 			if((m_p == null) || (m_lv.View != View.Details)) { e.DrawDefault = true; return; }
-			if(e.ColumnIndex != 0) return; // schon mit Spalte 0 gezeichnet
-			if(!PaintRow(e.Graphics, e.Item, e.ItemIndex)) e.DrawDefault = true;
+			if(e.ColumnIndex != 0)
+			{
+				// Schon mit Spalte 0 gezeichnet. Ausdrücklich setzen: Verlangt ein anderes Plugin hier
+				// „Windows zeichnet“, läge der Standardtext über der eigenen Zeile (ohne Symbole).
+				e.DrawDefault = m_rowDefault;
+				return;
+			}
+			m_rowDefault = !PaintRow(e.Graphics, e.Item, e.ItemIndex);
+			e.DrawDefault = m_rowDefault;
 		}
 
 		/// <summary>Ganze Zeile in einem Durchgang (Hintergrund + alle Spalten), damit beim

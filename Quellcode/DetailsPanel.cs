@@ -106,6 +106,8 @@ namespace FluentTheme
 		private readonly List<NotesBox> m_fieldBoxes = new List<NotesBox>();
 		private int m_fieldUsed;
 		private Totp m_totp;
+		private bool m_totpBad; // Einmalcode-Feld vorhanden, aber kein Code berechenbar
+		private bool m_copyOk = true; // Ergebnis des letzten Kopierens (für die Rückmeldung „Kopiert“)
 		private long m_totpTick = -1;
 
 		/// <summary>Klick auf einen Tag-Chip im Kopf der Detailansicht.</summary>
@@ -322,6 +324,7 @@ namespace FluentTheme
 			m_entry = pe;
 			m_entryMod = mod;
 			m_totp = Totp.FromEntry(pe);
+			m_totpBad = ((m_totp == null) && Totp.HasTotpField(pe));
 			UpdateTimer();
 			m_selCount = cnt;
 			m_bits = -1;
@@ -348,7 +351,7 @@ namespace FluentTheme
 			if((m_totp == null) || (m_entry == null)) return;
 			int left;
 			string code = m_totp.Generate(DateTime.UtcNow, out left);
-			KpCompat.Copy(m_host, new ProtectedString(true, code), m_entry);
+			m_copyOk = KpCompat.Copy(m_host, new ProtectedString(true, code), m_entry);
 		}
 
 		private void ToggleNotes()
@@ -530,7 +533,22 @@ namespace FluentTheme
 			if(pe == null) return;
 			ProtectedString ps = pe.Strings.Get(key);
 			if(ps == null) return;
-			KpCompat.Copy(m_host, ps, pe);
+			m_copyOk = KpCompat.Copy(m_host, ps, pe);
+		}
+
+		private void OpenEntryUrl(PwEntry pe)
+		{
+			if(!KpCompat.OpenEntryUrl(m_host, pe)) ShowWarning(L.T("Die Adresse konnte nicht geöffnet werden."));
+		}
+
+		private void OpenFieldUrl(string url, PwEntry pe)
+		{
+			if(!KpCompat.OpenUrl(m_host, url, pe)) ShowWarning(L.T("Die Adresse konnte nicht geöffnet werden."));
+		}
+
+		private void ShowWarning(string text)
+		{
+			MessageBox.Show(this.FindForm(), text, "Fluent Theme", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 		}
 
 		private void SetContentHeight(int h)
@@ -1003,13 +1021,15 @@ namespace FluentTheme
 			int lw = LabelWidth(g, r, new string[] { L.T("Benutzername"), L.T("Passwort"), L.T("URL") });
 
 			string user = pe.Strings.ReadSafe(PwDefs.UserNameField);
-			string pw = pe.Strings.ReadSafe(PwDefs.PasswordField);
+			// Das Passwort wird nur entschlüsselt, wenn es sichtbar sein soll oder einmalig bewertet wird
+			ProtectedString psPw = pe.Strings.GetSafe(PwDefs.PasswordField);
+			bool hasPw = !psPw.IsEmpty;
 			string url = pe.Strings.ReadSafe(PwDefs.UrlField);
 
 			y = Row(g, r, y, lw, L.T("Benutzername"), user, m_fBase, m_p.Text, draw, true, user, null, true, new Btn[] {
 				new Btn(Glyph.Copy, L.T("Benutzername kopieren"), delegate { CopyField(pe, PwDefs.UserNameField); }) });
 
-			string pwShown = ((pw.Length == 0) ? string.Empty : (m_reveal ? pw : Mask));
+			string pwShown = (!hasPw ? string.Empty : (m_reveal ? psPw.ReadString() : Mask));
 			y = Row(g, r, y, lw, L.T("Passwort"), pwShown, m_reveal ? m_fMono : m_fBase, m_p.Text, draw, true, null, null,
 				false, new Btn[] {
 					new Btn(m_reveal ? Glyph.EyeOff : Glyph.Eye, m_reveal ? L.T("Passwort verbergen") :
@@ -1017,40 +1037,63 @@ namespace FluentTheme
 					new Btn(Glyph.Copy, L.T("Passwort kopieren"), delegate { CopyField(pe, PwDefs.PasswordField); }) });
 
 			Action openUrl = null;
-			if(url.Trim().Length > 0) openUrl = delegate { KpCompat.OpenEntryUrl(m_host, pe); };
-			y = Row(g, r, y, lw, L.T("URL"), url, m_fBase, m_p.Link, draw, (pw.Length > 0) || (m_totp != null), url, openUrl,
+			if(url.Trim().Length > 0) openUrl = delegate { OpenEntryUrl(pe); };
+			y = Row(g, r, y, lw, L.T("URL"), url, m_fBase, m_p.Link, draw, hasPw || (m_totp != null) || m_totpBad, url, openUrl,
 				false, new Btn[] {
-				new Btn(Glyph.Open, L.T("URL öffnen"), delegate { KpCompat.OpenEntryUrl(m_host, pe); }),
+				new Btn(Glyph.Open, L.T("URL öffnen"), delegate { OpenEntryUrl(pe); }),
 				new Btn(Glyph.Copy, L.T("URL kopieren"), delegate { CopyField(pe, PwDefs.UrlField); }) });
 
-			if(m_totp != null) y = TotpRow(g, r, y, lw, draw, pw.Length > 0);
+			if(m_totp != null) y = TotpRow(g, r, y, lw, draw, hasPw);
+			else if(m_totpBad)
+				y = Row(g, r, y, lw, L.T("Einmalcode"), L.T("Kann nicht angezeigt werden"), m_fBase, m_p.Sub, draw, hasPw,
+					null, null, false, new Btn[0]);
 
-			if(pw.Length > 0)
+			if(hasPw)
 			{
 				int sh = Math.Max(D(32), m_fLabel.Height + D(14));
 				if(draw)
 				{
-					if(m_bits < 0) m_bits = KpCompat.EstimateBits(pw);
+					if(m_bits == -1)
+					{
+						// Einmal je Eintrag bewerten, das Zeichenfeld danach leeren
+						char[] v = psPw.ReadChars();
+						try
+						{
+							int est = KpCompat.EstimateBits(v);
+							m_bits = ((est < 0) ? -2 : est);
+						}
+						finally { Array.Clear(v, 0, v.Length); }
+					}
 					int bits = m_bits;
-					Color c;
-					string lbl;
-					if(bits < 50) { c = m_p.Weak; lbl = L.T("Schwach"); }
-					else if(bits < 80) { c = m_p.Mid; lbl = L.T("Mittel"); }
-					else if(bits < 112) { c = m_p.Good; lbl = L.T("Stark"); }
-					else { c = m_p.Good; lbl = L.T("Sehr stark"); }
+					if(bits < 0)
+					{
+						int sx = r.Left + D(16) + lw;
+						TextRenderer.DrawText(g, L.T("Stärke nicht verfügbar"), m_fLabel, new Rectangle(sx, y,
+							Math.Max(0, r.Right - D(14) - sx), sh), m_p.Sub, TextFormatFlags.Left |
+							TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+					}
+					else
+					{
+						Color c;
+						string lbl;
+						if(bits < 50) { c = m_p.Weak; lbl = L.T("Schwach"); }
+						else if(bits < 80) { c = m_p.Mid; lbl = L.T("Mittel"); }
+						else if(bits < 112) { c = m_p.Good; lbl = L.T("Stark"); }
+						else { c = m_p.Good; lbl = L.T("Sehr stark"); }
 
-					string txt = lbl + " · " + bits.ToString(CultureInfo.CurrentCulture) + " Bit";
-					int tw = TextWidth(g, txt, m_fLabel) + D(4);
-					int lx = r.Left + D(16) + lw;
-					int textX = r.Right - D(14) - tw;
-					Rectangle track = new Rectangle(lx, y + sh / 2 - D(2), Math.Max(0, textX - D(12) - lx), D(4));
-					Gfx.Fill(g, track, D(2), m_p.Border);
-					Rectangle fill = track;
-					fill.Width = (int)(track.Width * Math.Min(1.0, bits / 128.0));
-					Gfx.Fill(g, fill, D(2), c);
-					TextRenderer.DrawText(g, txt, m_fLabel, new Rectangle(textX, y, tw, sh), c,
-						TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
-						TextFormatFlags.NoPrefix);
+						string txt = lbl + " · " + bits.ToString(CultureInfo.CurrentCulture) + " Bit";
+						int tw = TextWidth(g, txt, m_fLabel) + D(4);
+						int lx = r.Left + D(16) + lw;
+						int textX = r.Right - D(14) - tw;
+						Rectangle track = new Rectangle(lx, y + sh / 2 - D(2), Math.Max(0, textX - D(12) - lx), D(4));
+						Gfx.Fill(g, track, D(2), m_p.Border);
+						Rectangle fill = track;
+						fill.Width = (int)(track.Width * Math.Min(1.0, bits / 128.0));
+						Gfx.Fill(g, fill, D(2), c);
+						TextRenderer.DrawText(g, txt, m_fLabel, new Rectangle(textX, y, tw, sh), c,
+							TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+							TextFormatFlags.NoPrefix);
+					}
 				}
 				y += sh;
 			}
@@ -1131,13 +1174,30 @@ namespace FluentTheme
 			return y + rowH;
 		}
 
-		private static bool LooksLikeUrl(string s)
+		/// <summary>Zusatzfelder: Neben Webadressen auch andere Protokolle (ftp://, ssh:// …) als Link
+		/// anbieten. cmd:// und file:// bleiben immer reiner Text, weil ein Klick Programme starten kann.</summary>
+		public bool MoreLinks { get; set; }
+
+		private bool LooksLikeUrl(string s)
 		{
 			if(string.IsNullOrEmpty(s)) return false;
 			s = s.Trim();
 			if((s.IndexOf(' ') >= 0) || (s.IndexOf('\n') >= 0)) return false;
-			return ((s.IndexOf("://", StringComparison.Ordinal) > 0) ||
-				s.StartsWith("www.", StringComparison.OrdinalIgnoreCase));
+			if(s.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+				s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+				s.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) return true;
+			if(!this.MoreLinks) return false;
+
+			int p = s.IndexOf("://", StringComparison.Ordinal);
+			if(p <= 0) return false;
+			string scheme = s.Substring(0, p);
+			foreach(char ch in scheme)
+			{
+				if(!(((ch >= 'a') && (ch <= 'z')) || ((ch >= 'A') && (ch <= 'Z')) || ((ch >= '0') && (ch <= '9')) ||
+					(ch == '+') || (ch == '-') || (ch == '.'))) return false;
+			}
+			return (!scheme.Equals("cmd", StringComparison.OrdinalIgnoreCase) &&
+				!scheme.Equals("file", StringComparison.OrdinalIgnoreCase));
 		}
 
 		private int CardFields(Graphics g, Rectangle r, bool draw)
@@ -1149,6 +1209,7 @@ namespace FluentTheme
 			foreach(KeyValuePair<string, ProtectedString> kvp in pe.Strings)
 			{
 				if(PwDefs.IsStandardField(kvp.Key)) continue;
+				if(Totp.IsSecretField(kvp.Key)) continue; // Einmalcode-Schlüssel nie anzeigen
 				if((m_totp != null) && m_totp.SourceFields.Contains(kvp.Key)) continue;
 				list.Add(kvp);
 			}
@@ -1173,9 +1234,11 @@ namespace FluentTheme
 			{
 				string key = list[i].Key;
 				ProtectedString ps = list[i].Value;
-				string val = ps.ReadString();
 				bool prot = ps.IsProtected;
 				bool masked = (prot && !m_reveal);
+				// Geschützte Felder nur entschlüsseln, wenn sie sichtbar sein sollen
+				string val = (masked ? string.Empty : ps.ReadString());
+				bool hasVal = !ps.IsEmpty;
 				bool isUrl = (!masked && LooksLikeUrl(val));
 
 				List<Btn> bl = new List<Btn>();
@@ -1186,13 +1249,13 @@ namespace FluentTheme
 				if(isUrl)
 				{
 					string u = val.Trim();
-					open = delegate { KpCompat.OpenUrl(m_host, u, pe); };
+					open = delegate { OpenFieldUrl(u, pe); };
 					bl.Add(new Btn(Glyph.Open, L.T("Öffnen"), open));
 				}
 				string k = key;
 				bl.Add(new Btn(Glyph.Copy, L.F("{0} kopieren", key), delegate { CopyField(pe, k); }));
 
-				y = Row(g, r, y, lw, key, masked ? ((val.Length > 0) ? Mask : string.Empty) : val,
+				y = Row(g, r, y, lw, key, masked ? (hasVal ? Mask : string.Empty) : val,
 					(prot && m_reveal) ? m_fMono : m_fBase, isUrl ? m_p.Link : m_p.Text, draw,
 					i < list.Count - 1, masked ? null : val, open, !prot && !isUrl, bl.ToArray());
 			}
@@ -1500,8 +1563,11 @@ namespace FluentTheme
 			if((h == null) || (h.Click == null)) return;
 			try
 			{
+				m_copyOk = true;
 				h.Click();
-				if(h.IsCopy)
+				if(h.IsCopy && !m_copyOk)
+					ShowWarning(L.T("Das Kopieren ist fehlgeschlagen. Der Wert liegt nicht in der Zwischenablage."));
+				else if(h.IsCopy)
 				{
 					m_clearSeconds = KpCompat.ClipboardClearSeconds();
 					m_copiedRect = h.Rect;

@@ -535,8 +535,51 @@ namespace FluentTheme
 
 		// ------------------------------------------------------------ Bilder
 
+		/// <summary>Die Aufnahme liest Bildschirmpixel. Liegt über dem Bereich ein Fenster eines anderen
+		/// Programms (Benachrichtigung, zweites KeePass …), wird abgebrochen, damit nichts Fremdes in
+		/// die Bilder gelangt. Geprüft wird von oben nach unten bis zum ersten eigenen Fenster, das den
+		/// Bereich ganz abdeckt (Hintergrundfläche bzw. Hauptfenster).</summary>
+		private static void EnsureNothingOnTop(Rectangle r)
+		{
+			uint own = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+			int n = 0;
+			for(IntPtr h = GetTopWindow(IntPtr.Zero); (h != IntPtr.Zero) && (n < 5000); h = GetWindow(h, GW_HWNDNEXT), ++n)
+			{
+				if(!IsWindowVisible(h) || IsIconic(h)) continue;
+				RECT wr;
+				if(!GetWindowRect(h, out wr)) continue;
+				Rectangle w = Rectangle.FromLTRB(wr.Left, wr.Top, wr.Right, wr.Bottom);
+				if((w.Width <= 0) || (w.Height <= 0) || !w.IntersectsWith(r)) continue;
+
+				uint pid;
+				GetWindowThreadProcessId(h, out pid);
+				if(pid == own)
+				{
+					if(w.Contains(r)) return; // alles darunter ist verdeckt
+					continue;
+				}
+
+				int cloaked;
+				if((DwmGetWindowAttribute(h, DWMWA_CLOAKED, out cloaked, 4) == 0) && (cloaked != 0)) continue;
+				// Durchklickbare Überlagerungen (z. B. von Grafiktreibern) zeigen in der Regel nichts an
+				if((GetWindowLong(h, GWL_EXSTYLE) & WS_EX_TRANSPARENT) != 0) continue;
+
+				StringBuilder cls = new StringBuilder(256);
+				GetClassName(h, cls, cls.Capacity);
+				string c = cls.ToString();
+				if((c == "Progman") || (c == "WorkerW")) continue; // Desktop-Hintergrund
+
+				StringBuilder title = new StringBuilder(256);
+				GetWindowText(h, title, title.Capacity);
+				throw new InvalidOperationException("Über dem Aufnahmebereich liegt ein fremdes Fenster (Titel \"" +
+					title + "\", Klasse \"" + c + "\") – abgebrochen, damit nichts Fremdes in die Screenshots " +
+					"gelangt. Bitte das Fenster schließen oder verschieben und die Screenshots neu erstellen.");
+			}
+		}
+
 		private static Bitmap Capture(Rectangle r)
 		{
+			EnsureNothingOnTop(r);
 			Bitmap b = new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
 			using(Graphics g = Graphics.FromImage(b))
 			{
@@ -607,6 +650,37 @@ namespace FluentTheme
 		}
 
 		private const uint SWP_NOACTIVATE = 0x0010;
+		private const uint GW_HWNDNEXT = 2;
+		private const int GWL_EXSTYLE = -20;
+		private const int WS_EX_TRANSPARENT = 0x00000020;
+		private const int DWMWA_CLOAKED = 14;
+
+		[DllImport("user32.dll")]
+		private static extern IntPtr GetTopWindow(IntPtr hWnd);
+
+		[DllImport("user32.dll")]
+		private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+		[DllImport("user32.dll")]
+		private static extern bool IsWindowVisible(IntPtr hWnd);
+
+		[DllImport("user32.dll")]
+		private static extern bool IsIconic(IntPtr hWnd);
+
+		[DllImport("user32.dll")]
+		private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+		[DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+		private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+		[DllImport("dwmapi.dll")]
+		private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
 		[DllImport("user32.dll")]
 		private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);

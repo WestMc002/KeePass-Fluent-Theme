@@ -19,13 +19,57 @@ namespace FluentTheme
 	/// ein Feld „otp“ im Format von KeePassXC (otpauth://…) oder KeeOtp (key=…&amp;step=…).</summary>
 	internal sealed class Totp
 	{
-		public byte[] Key;
+		// Der Schlüssel liegt nur verschlüsselt im Speicher (wie die Felder in KeePass) und wird
+		// allein für die Berechnung eines Codes kurz entschlüsselt
+		private ProtectedBinary m_key;
+
+		/// <summary>Schlüssel setzen; das übergebene Feld wird danach geleert.</summary>
+		public byte[] Key
+		{
+			set
+			{
+				m_key = (((value != null) && (value.Length > 0)) ? new ProtectedBinary(true, value) : null);
+				if(value != null) Array.Clear(value, 0, value.Length);
+			}
+		}
+
+		public bool HasKey
+		{
+			get { return ((m_key != null) && (m_key.Length > 0)); }
+		}
 		public int Digits = 6;
 		public int Period = 30;
 		public string Algorithm = "SHA1";
 
 		/// <summary>Felder, aus denen das Geheimnis stammt (werden unter „Weitere Felder“ ausgeblendet).</summary>
 		public readonly List<string> SourceFields = new List<string>();
+
+		/// <summary>Felder, die einen Einmalcode-Schlüssel enthalten (KeePass, KeePassXC, KeeOtp,
+		/// KeeTrayTOTP). Sie erscheinen nie unter „Weitere Felder“ – auch dann nicht, wenn sich aus
+		/// ihnen kein Code berechnen lässt.</summary>
+		public static bool IsSecretField(string name)
+		{
+			if(string.IsNullOrEmpty(name)) return false;
+			return (name.StartsWith("TimeOtp-Secret", StringComparison.OrdinalIgnoreCase) ||
+				name.StartsWith("HmacOtp-Secret", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(name, "otp", StringComparison.OrdinalIgnoreCase) ||
+				string.Equals(name, "TOTP Seed", StringComparison.OrdinalIgnoreCase));
+		}
+
+		/// <summary>Hat der Eintrag ein Feld für zeitbasierte Einmalcodes (auch wenn es ungültig ist)?</summary>
+		public static bool HasTotpField(PwEntry pe)
+		{
+			if(pe == null) return false;
+			foreach(KeyValuePair<string, ProtectedString> kvp in pe.Strings)
+			{
+				if(kvp.Key.StartsWith("TimeOtp-Secret", StringComparison.OrdinalIgnoreCase) ||
+					string.Equals(kvp.Key, "otp", StringComparison.OrdinalIgnoreCase))
+				{
+					if(!kvp.Value.IsEmpty) return true;
+				}
+			}
+			return false;
+		}
 
 		public static Totp FromEntry(PwEntry pe)
 		{
@@ -34,7 +78,7 @@ namespace FluentTheme
 			{
 				Totp t = FromKeePass(pe);
 				if(t == null) t = FromOtpField(pe);
-				if((t == null) || (t.Key == null) || (t.Key.Length == 0)) return null;
+				if((t == null) || !t.HasKey) return null;
 				if((t.Digits < 6) || (t.Digits > 10)) t.Digits = 6;
 				if((t.Period < 1) || (t.Period > 3600)) t.Period = 30;
 				return t;
@@ -152,10 +196,15 @@ namespace FluentTheme
 			if(BitConverter.IsLittleEndian) Array.Reverse(msg);
 
 			byte[] hash;
-			using(HMAC h = CreateHmac())
+			byte[] key = m_key.ReadData();
+			try
 			{
-				hash = h.ComputeHash(msg);
+				using(HMAC h = CreateHmac(key))
+				{
+					hash = h.ComputeHash(msg);
+				}
 			}
+			finally { Array.Clear(key, 0, key.Length); }
 			int off = hash[hash.Length - 1] & 0x0F;
 			long bin = ((hash[off] & 0x7F) << 24) | (hash[off + 1] << 16) | (hash[off + 2] << 8) | hash[off + 3];
 			long mod = 1;
@@ -172,11 +221,11 @@ namespace FluentTheme
 			return code.Substring(0, half) + " " + code.Substring(half);
 		}
 
-		private HMAC CreateHmac()
+		private HMAC CreateHmac(byte[] key)
 		{
-			if(Algorithm == "SHA512") return new HMACSHA512(Key);
-			if(Algorithm == "SHA256") return new HMACSHA256(Key);
-			return new HMACSHA1(Key);
+			if(Algorithm == "SHA512") return new HMACSHA512(key);
+			if(Algorithm == "SHA256") return new HMACSHA256(key);
+			return new HMACSHA1(key);
 		}
 
 		private static byte[] FromHex(string s)
