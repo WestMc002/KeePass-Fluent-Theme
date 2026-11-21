@@ -53,6 +53,11 @@ namespace FluentTheme
 		/// <summary>Schutz der echten KeePass-Einstellungen: Der Screenshot-Modus läuft nur, wenn KeePass
 		/// seine Einstellungen aus der Datei neben KeePass.exe nimmt (portable Kopie). Würde KeePass die
 		/// Einstellungen des Benutzers verwenden, wird nichts geändert und der Grund in Fehler.txt notiert.</summary>
+		/// <summary>Kennzeichnet die eigens für Screenshots angelegte KeePass-Kopie. Ohne diese Datei
+		/// neben KeePass.exe ändert der Screenshot-Modus nichts – auch nicht in einer anderen
+		/// portablen KeePass-Installation.</summary>
+		private const string MarkerFile = "Screenshot-Instanz.txt";
+
 		public static bool UsesLocalConfig(string dir)
 		{
 			string why = null;
@@ -65,6 +70,9 @@ namespace FluentTheme
 					why = "Neben KeePass.exe liegt keine KeePass.config.xml.";
 				else if(KeePass.Program.Config.Meta.PreferUserConfiguration)
 					why = "In der KeePass.config.xml neben KeePass.exe steht PreferUserConfiguration = true.";
+				else if(!File.Exists(Path.Combine(Path.GetDirectoryName(exe), MarkerFile)))
+					why = "Neben KeePass.exe fehlt die Datei " + MarkerFile + ". Sie kennzeichnet die eigene " +
+						"KeePass-Kopie für Screenshots (Inhalt beliebig) und darf nur dort liegen.";
 			}
 			catch(Exception ex) { why = ex.Message; }
 			if(why == null) return true;
@@ -569,12 +577,42 @@ namespace FluentTheme
 				string c = cls.ToString();
 				if((c == "Progman") || (c == "WorkerW")) continue; // Desktop-Hintergrund
 
-				StringBuilder title = new StringBuilder(256);
-				GetWindowText(h, title, title.Capacity);
-				throw new InvalidOperationException("Über dem Aufnahmebereich liegt ein fremdes Fenster (Titel \"" +
-					title + "\", Klasse \"" + c + "\") – abgebrochen, damit nichts Fremdes in die Screenshots " +
+				// Fenster mit durchsichtigen Flächen (z. B. ein Dock, dessen Fenster größer ist als die
+				// sichtbare Leiste): nur beanstanden, wenn es im Aufnahmebereich wirklich etwas zeigt
+				if(((GetWindowLong(h, GWL_EXSTYLE) & WS_EX_LAYERED) != 0) && !ShowsSomething(h, Rectangle.Intersect(w, r)))
+					continue;
+
+				// Bewusst ohne Fenstertitel: Der könnte selbst vertraulich sein (Dokument, Webseite)
+				string proc = "unbekannt";
+				try { proc = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; }
+				catch(Exception) { }
+				throw new InvalidOperationException("Über dem Aufnahmebereich liegt ein fremdes Fenster (Programm \"" +
+					proc + "\", Klasse \"" + c + "\") – abgebrochen, damit nichts Fremdes in die Screenshots " +
 					"gelangt. Bitte das Fenster schließen oder verschieben und die Screenshots neu erstellen.");
 			}
+		}
+
+		/// <summary>Zeigt das (teilweise durchsichtige) Fenster im Bereich etwas an? Windows trifft bei
+		/// solchen Fenstern mit der Maus nur die sichtbaren Stellen – der Bereich wird deshalb in einem
+		/// feinen Raster abgetastet. Im Zweifel (Fehler) gilt das Fenster als sichtbar.</summary>
+		private static bool ShowsSomething(IntPtr h, Rectangle part)
+		{
+			try
+			{
+				if((part.Width <= 0) || (part.Height <= 0)) return false;
+				const int step = 4;
+				for(int y = part.Top; y < part.Bottom; y += step)
+				{
+					for(int x = part.Left; x < part.Right; x += step)
+					{
+						IntPtr hit = WindowFromPoint(new POINT(x, y));
+						if(hit == IntPtr.Zero) continue;
+						if((hit == h) || (GetAncestor(hit, GA_ROOT) == h)) return true;
+					}
+				}
+				return false;
+			}
+			catch(Exception) { return true; }
 		}
 
 		private static Bitmap Capture(Rectangle r)
@@ -584,6 +622,13 @@ namespace FluentTheme
 			using(Graphics g = Graphics.FromImage(b))
 			{
 				g.CopyFromScreen(r.Location, Point.Empty, r.Size, CopyPixelOperation.SourceCopy);
+			}
+			// Noch einmal prüfen: Ein Fenster kann genau während der Aufnahme erschienen sein
+			try { EnsureNothingOnTop(r); }
+			catch(Exception)
+			{
+				b.Dispose();
+				throw;
 			}
 			return b;
 		}
@@ -653,6 +698,21 @@ namespace FluentTheme
 		private const uint GW_HWNDNEXT = 2;
 		private const int GWL_EXSTYLE = -20;
 		private const int WS_EX_TRANSPARENT = 0x00000020;
+		private const int WS_EX_LAYERED = 0x00080000;
+		private const uint GA_ROOT = 2;
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct POINT
+		{
+			public int X, Y;
+			public POINT(int x, int y) { X = x; Y = y; }
+		}
+
+		[DllImport("user32.dll")]
+		private static extern IntPtr WindowFromPoint(POINT pt);
+
+		[DllImport("user32.dll")]
+		private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 		private const int DWMWA_CLOAKED = 14;
 
 		[DllImport("user32.dll")]
@@ -672,9 +732,6 @@ namespace FluentTheme
 
 		[DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
 		private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
-		private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
 		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
 		private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);

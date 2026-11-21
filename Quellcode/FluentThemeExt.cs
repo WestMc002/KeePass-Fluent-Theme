@@ -183,6 +183,7 @@ namespace FluentTheme
 				m_dialogs.Attach();
 
 				SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+				m_host.MainWindow.FileClosed += OnFileClosed;
 
 				m_timer = new Timer();
 				m_timer.Interval = 400;
@@ -208,6 +209,7 @@ namespace FluentTheme
 			try
 			{
 				SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+				m_host.MainWindow.FileClosed -= OnFileClosed;
 				if(m_timer != null)
 				{
 					m_timer.Stop();
@@ -312,6 +314,16 @@ namespace FluentTheme
 		private bool MoreLinks
 		{
 			get { return m_host.CustomConfig.GetBool(CfgMoreLinks, false); }
+		}
+
+		/// <summary>Datenbank geschlossen oder gesperrt: Die Detailansicht vergisst den Eintrag sofort.</summary>
+		private void OnFileClosed(object sender, FileClosedEventArgs e)
+		{
+			try
+			{
+				if(m_details != null) m_details.ClearEntry();
+			}
+			catch(Exception ex) { Report(ex); }
 		}
 
 		private bool ListHover
@@ -707,6 +719,11 @@ namespace FluentTheme
 				MainForm mf = m_host.MainWindow;
 				if((mf == null) || mf.IsDisposed || !mf.IsHandleCreated) return;
 				if(m_p == null) { ApplyAll(); return; }
+
+				// Sicherheitsnetz zu OnFileClosed: Zeigt die Detailansicht noch einen Eintrag, obwohl
+				// keine Datenbank (mehr) offen ist – gleich auf welchem Weg gesperrt wurde –, leeren
+				if((m_details != null) && m_details.HasEntry && ((m_host.Database == null) || !m_host.Database.IsOpen))
+					m_details.ClearEntry();
 
 				if((m_renderer != null) && (ToolStripManager.Renderer != m_renderer))
 					ToolStripManager.Renderer = m_renderer;

@@ -7,6 +7,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
 using KeePass.Forms;
@@ -19,6 +20,18 @@ namespace FluentTheme
 {
 	/// <summary>Ruft KeePass-Funktionen per Reflection auf, damit das Plugin mit
 	/// möglichst vielen KeePass-2.x-Versionen funktioniert.</summary>
+	/// <summary>Ergebnis eines Kopierens über KeePass.</summary>
+	internal enum CopyResult
+	{
+		/// <summary>Kopiert, die Löschfrist von KeePass läuft.</summary>
+		Ok,
+		/// <summary>Nicht kopiert; der Wert liegt nachweislich nicht in der Zwischenablage.</summary>
+		Failed,
+		/// <summary>Fehlgeschlagen, und das Leeren ließ sich nicht bestätigen: Der Wert kann noch in
+		/// der Zwischenablage liegen.</summary>
+		FailedMayRemain
+	}
+
 	internal static class KpCompat
 	{
 		private static Assembly KpAsm
@@ -89,44 +102,90 @@ namespace FluentTheme
 			return args;
 		}
 
-		/// <summary>Kopiert wie KeePass selbst (Platzhalter, Auto-Löschen der Zwischenablage).
-		/// Rückgabe false: KeePass konnte das Kopieren nicht übernehmen. Dann schreibt das Plugin
-		/// nichts selbst in die Zwischenablage – ein Geheimnis läge dort sonst ohne Löschfrist.</summary>
-		public static bool Copy(IPluginHost host, ProtectedString ps, PwEntry pe)
+		// Kopieren, Löschfrist und Öffnen von Adressen rufen KeePass mit festen Signaturen auf (Stand
+		// KeePass 2.62, gegen das gebaut wird) – genau so, wie es das Hauptfenster von KeePass selbst
+		// tut. Jeder Aufruf steht in einer eigenen, nicht eingebetteten Methode: Fehlt die Methode in
+		// einer künftigen KeePass-Version, scheitert nur dieser Aufruf und wird hier abgefangen.
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static bool KpCopy(IPluginHost host, ProtectedString ps, PwEntry pe)
 		{
-			if(ps == null) return false;
-			try
-			{
-				Type t = KpAsm.GetType("KeePass.Util.ClipboardUtil");
-				MethodInfo mi = FindStatic(t, "CopyAndMinimize", typeof(ProtectedString));
-				if(mi == null) mi = FindStatic(t, "Copy", typeof(ProtectedString));
-				if(mi == null) return false;
-				object res = mi.Invoke(null, BuildArgs(mi, host, ps, null, pe));
-				if((res is bool) && !(bool)res) return false;
-			}
+			return KeePass.Util.ClipboardUtil.CopyAndMinimize(ps, true, host.MainWindow, pe, host.Database);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static void KpStartCountdown(IPluginHost host)
+		{
+			host.MainWindow.StartClipboardCountdown();
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static void KpClearClipboard()
+		{
+			KeePass.Util.ClipboardUtil.Clear();
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static void KpOpenEntryUrl(PwEntry pe)
+		{
+			KeePass.Util.WinUtil.OpenEntryUrl(pe);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static void KpOpenUrl(string url, PwEntry pe)
+		{
+			KeePass.Util.WinUtil.OpenUrl(url, pe);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static int KpEstimateBits(char[] pw)
+		{
+			return (int)KeePassLib.Cryptography.QualityEstimation.EstimatePasswordBits(pw);
+		}
+
+		/// <summary>Zwischenablage leeren und nachprüfen. true nur, wenn danach nachweislich kein Text
+		/// mehr darin liegt.</summary>
+		private static bool ClearClipboardVerified()
+		{
+			try { KpClearClipboard(); }
 			catch(Exception ex)
 			{
 				FluentThemeExt.Report(ex);
-				return false;
+				try { Clipboard.Clear(); }
+				catch(Exception ex2) { FluentThemeExt.Report(ex2); }
+			}
+			try { return !Clipboard.ContainsText(); }
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+			return false;
+		}
+
+		/// <summary>Kopiert wie KeePass selbst (Platzhalter, Auto-Löschen der Zwischenablage).
+		/// Das Plugin schreibt nie selbst in die Zwischenablage – ein Geheimnis läge dort sonst ohne
+		/// Löschfrist. Das Ergebnis sagt auch, ob der Wert nach einem Fehler noch dort liegen kann.</summary>
+		public static CopyResult Copy(IPluginHost host, ProtectedString ps, PwEntry pe)
+		{
+			if(ps == null) return CopyResult.Failed;
+			try
+			{
+				// false: KeePass hat nichts in die Zwischenablage geschrieben
+				if(!KpCopy(host, ps, pe)) return CopyResult.Failed;
+			}
+			catch(Exception ex)
+			{
+				// Unklar, wie weit KeePass gekommen ist – vorsichtshalber leeren
+				FluentThemeExt.Report(ex);
+				return (ClearClipboardVerified() ? CopyResult.Failed : CopyResult.FailedMayRemain);
 			}
 
 			try
 			{
-				MethodInfo sc = host.MainWindow.GetType().GetMethod("StartClipboardCountdown",
-					BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
-					Type.EmptyTypes, null);
-				if(sc != null)
-				{
-					sc.Invoke(host.MainWindow, null);
-					return true;
-				}
+				KpStartCountdown(host);
+				return CopyResult.Ok;
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 
 			// Die Löschfrist von KeePass ließ sich nicht starten: lieber sofort leeren als liegen lassen
-			try { Clipboard.Clear(); }
-			catch(Exception ex) { FluentThemeExt.Report(ex); }
-			return false;
+			return (ClearClipboardVerified() ? CopyResult.Failed : CopyResult.FailedMayRemain);
 		}
 
 		/// <summary>Öffnet die URL des Eintrags über KeePass. Rückgabe false: nicht möglich.</summary>
@@ -135,18 +194,11 @@ namespace FluentTheme
 			if(pe == null) return false;
 			try
 			{
-				Type t = KpAsm.GetType("KeePass.Util.WinUtil");
-				MethodInfo mi = FindExact(t, "OpenEntryUrl", new Type[] { typeof(PwEntry) });
-				if(mi == null) mi = FindStatic(t, "OpenEntryUrl", typeof(PwEntry));
-				if(mi != null)
-				{
-					mi.Invoke(null, BuildArgs(mi, host, null, null, pe));
-					return true;
-				}
+				KpOpenEntryUrl(pe);
+				return true;
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
-
-			return OpenUrl(host, pe.Strings.ReadSafe(PwDefs.UrlField), pe);
+			return false;
 		}
 
 		/// <summary>Öffnet eine Adresse ausschließlich über KeePass (URL-Überschreibungen, Platzhalter).
@@ -157,16 +209,8 @@ namespace FluentTheme
 			if(string.IsNullOrEmpty(url)) return false;
 			try
 			{
-				Type t = KpAsm.GetType("KeePass.Util.WinUtil");
-				// Bevorzugt die einfachen Überladungen OpenUrl(string, PwEntry[, bool])
-				MethodInfo mi = FindExact(t, "OpenUrl", new Type[] { typeof(string), typeof(PwEntry) });
-				if(mi == null) mi = FindExact(t, "OpenUrl", new Type[] { typeof(string), typeof(PwEntry), typeof(bool) });
-				if(mi == null) mi = FindStatic(t, "OpenUrl", typeof(string));
-				if(mi != null)
-				{
-					mi.Invoke(null, BuildArgs(mi, host, null, url, pe));
-					return true;
-				}
+				KpOpenUrl(url, pe);
+				return true;
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 			return false;
@@ -312,20 +356,7 @@ namespace FluentTheme
 		public static int EstimateBits(char[] pw)
 		{
 			if((pw == null) || (pw.Length == 0)) return 0;
-			try
-			{
-				Type t = typeof(PwEntry).Assembly.GetType("KeePassLib.Cryptography.QualityEstimation");
-				if(t != null)
-				{
-					foreach(MethodInfo mi in t.GetMethods(BindingFlags.Public | BindingFlags.Static))
-					{
-						if(mi.Name != "EstimatePasswordBits") continue;
-						ParameterInfo[] pars = mi.GetParameters();
-						if((pars.Length != 1) || (pars[0].ParameterType != typeof(char[]))) continue;
-						return Convert.ToInt32(mi.Invoke(null, new object[] { pw }));
-					}
-				}
-			}
+			try { return KpEstimateBits(pw); }
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 			return -1;
 		}

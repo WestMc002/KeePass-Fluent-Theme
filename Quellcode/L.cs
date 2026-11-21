@@ -156,6 +156,7 @@ namespace FluentTheme
 			{ "Stärke nicht verfügbar", "Strength not available" },
 			{ "Kann nicht angezeigt werden", "Cannot be displayed" },
 			{ "Das Kopieren ist fehlgeschlagen. Der Wert liegt nicht in der Zwischenablage.", "Copying failed. The value is not in the clipboard." },
+			{ "Das Kopieren ist fehlgeschlagen, und die Zwischenablage ließ sich nicht leeren. Der Wert kann noch in der Zwischenablage liegen – bitte dort etwas anderes kopieren.", "Copying failed, and the clipboard could not be cleared. The value may still be in the clipboard – please copy something else there." },
 			{ "Die Adresse konnte nicht geöffnet werden.", "The address could not be opened." },
 			{ "Einmalcode", "One-time code" },
 			{ "Einmalcode kopieren", "Copy one-time code" },

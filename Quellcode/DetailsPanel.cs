@@ -107,7 +107,7 @@ namespace FluentTheme
 		private int m_fieldUsed;
 		private Totp m_totp;
 		private bool m_totpBad; // Einmalcode-Feld vorhanden, aber kein Code berechenbar
-		private bool m_copyOk = true; // Ergebnis des letzten Kopierens (für die Rückmeldung „Kopiert“)
+		private CopyResult m_copyRes = CopyResult.Ok; // Ergebnis des letzten Kopierens (für die Rückmeldung „Kopiert“)
 		private long m_totpTick = -1;
 
 		/// <summary>Klick auf einen Tag-Chip im Kopf der Detailansicht.</summary>
@@ -299,6 +299,15 @@ namespace FluentTheme
 
 		public void RefreshIfChanged(bool force)
 		{
+			// Ohne offene Datenbank (geschlossen oder gesperrt) wird nie ein Eintrag übernommen –
+			// auch dann nicht, wenn KeePass die Auswahl noch einen Moment lang zurückgibt
+			if((m_host.Database == null) || !m_host.Database.IsOpen)
+			{
+				if(m_entry != null) ClearEntry();
+				else if(force) Invalidate();
+				return;
+			}
+
 			PwEntry pe = null;
 			int cnt = m_lv.SelectedIndices.Count;
 			if(cnt == 1)
@@ -351,7 +360,7 @@ namespace FluentTheme
 			if((m_totp == null) || (m_entry == null)) return;
 			int left;
 			string code = m_totp.Generate(DateTime.UtcNow, out left);
-			m_copyOk = KpCompat.Copy(m_host, new ProtectedString(true, code), m_entry);
+			m_copyRes = KpCompat.Copy(m_host, new ProtectedString(true, code), m_entry);
 		}
 
 		private void ToggleNotes()
@@ -369,6 +378,7 @@ namespace FluentTheme
 				if(m_notesBox == null)
 				{
 					m_notesBox = new NotesBox(true);
+					m_notesBox.CopyHandler = CopySelection;
 					StyleNotesBox();
 					this.Controls.Add(m_notesBox);
 				}
@@ -440,6 +450,7 @@ namespace FluentTheme
 				else
 				{
 					b = new NotesBox(false);
+					b.CopyHandler = CopySelection;
 					m_fieldBoxes.Add(b);
 					this.Controls.Add(b);
 				}
@@ -485,6 +496,31 @@ namespace FluentTheme
 			[System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
 			private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
+			private const int WM_COPY = 0x0301;
+
+			/// <summary>Übernimmt das Kopieren der Markierung (über KeePass, mit Löschfrist).</summary>
+			public Func<string, bool> CopyHandler;
+
+			/// <summary>Markierten Text kopieren – nie direkt über Windows, sondern über KeePass, damit
+			/// die Zwischenablage wie bei den Kopieren-Knöpfen nach der Frist geleert wird.</summary>
+			private void CopySelected()
+			{
+				if(this.SelectionLength <= 0) return;
+				Func<string, bool> h = this.CopyHandler;
+				if(h != null) h(this.SelectedText);
+			}
+
+			protected override void WndProc(ref Message m)
+			{
+				// Auch „Kopieren“ aus dem Kontextmenü des Textfelds kommt hier an
+				if(m.Msg == WM_COPY)
+				{
+					CopySelected();
+					return;
+				}
+				base.WndProc(ref m);
+			}
+
 			public NotesBox(bool multiline)
 			{
 				this.ReadOnly = true;
@@ -516,7 +552,7 @@ namespace FluentTheme
 				// (z. B. Passwort kopieren) und nicht die Markierung
 				if((keyData == (Keys.Control | Keys.C)) || (keyData == (Keys.Control | Keys.Insert)))
 				{
-					if(this.SelectionLength > 0) Copy();
+					CopySelected();
 					return true;
 				}
 				if(keyData == (Keys.Control | Keys.A))
@@ -533,7 +569,64 @@ namespace FluentTheme
 			if(pe == null) return;
 			ProtectedString ps = pe.Strings.Get(key);
 			if(ps == null) return;
-			m_copyOk = KpCompat.Copy(m_host, ps, pe);
+			m_copyRes = KpCompat.Copy(m_host, ps, pe);
+		}
+
+		/// <summary>Markierten Text aus Notizen oder einem Feld über KeePass kopieren.</summary>
+		private bool CopySelection(string text)
+		{
+			if(string.IsNullOrEmpty(text) || (m_entry == null)) return false;
+			CopyResult res = KpCompat.Copy(m_host, new ProtectedString(true, text), m_entry);
+			if(res != CopyResult.Ok) ShowCopyError(res);
+			return (res == CopyResult.Ok);
+		}
+
+		/// <summary>Meldung nach fehlgeschlagenem Kopieren – sagt nur dann „liegt nicht in der
+		/// Zwischenablage“, wenn das nachgeprüft ist.</summary>
+		private void ShowCopyError(CopyResult res)
+		{
+			if(res == CopyResult.FailedMayRemain)
+				ShowWarning(L.T("Das Kopieren ist fehlgeschlagen, und die Zwischenablage ließ sich nicht leeren. Der Wert kann noch in der Zwischenablage liegen – bitte dort etwas anderes kopieren."));
+			else
+				ShowWarning(L.T("Das Kopieren ist fehlgeschlagen. Der Wert liegt nicht in der Zwischenablage."));
+		}
+
+		/// <summary>Zeigt die Ansicht gerade einen Eintrag?</summary>
+		public bool HasEntry
+		{
+			get { return (m_entry != null); }
+		}
+
+		/// <summary>Beim Schließen oder Sperren der Datenbank: Eintrag, Texte, Hinweise und Klickflächen
+		/// sofort verwerfen, damit nichts vom zuletzt gezeigten Eintrag in der Ansicht zurückbleibt.</summary>
+		public void ClearEntry()
+		{
+			m_entry = null;
+			m_entryMod = DateTime.MinValue;
+			m_selCount = 0;
+			m_totp = null;
+			m_totpBad = false;
+			m_bits = -1;
+			m_reveal = false;
+			m_notesExpanded = false;
+			m_copiedRect = Rectangle.Empty;
+			m_hotRect = Rectangle.Empty;
+			m_hits.Clear();
+			if(m_notesBox != null)
+			{
+				m_notesBox.Text = string.Empty;
+				m_notesBox.Visible = false;
+			}
+			foreach(NotesBox fb in m_fieldBoxes)
+			{
+				fb.Text = string.Empty;
+				fb.Visible = false;
+				m_tip.SetToolTip(fb, null);
+			}
+			m_tipText = string.Empty;
+			m_tip.SetToolTip(this, null);
+			UpdateTimer();
+			Invalidate();
 		}
 
 		private void OpenEntryUrl(PwEntry pe)
@@ -683,10 +776,19 @@ namespace FluentTheme
 					this.ClientRectangle, m_p.Sub, TextFormatFlags.HorizontalCenter |
 					TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
 			}
-			if(!m_notesPlaced && (m_notesBox != null) && m_notesBox.Visible) m_notesBox.Visible = false;
+			// Nicht mehr gebrauchte Textfelder ausblenden und leeren (kein alter Inhalt im Hintergrund)
+			if(!m_notesPlaced && (m_notesBox != null) && m_notesBox.Visible)
+			{
+				m_notesBox.Visible = false;
+				m_notesBox.Text = string.Empty;
+			}
 			for(int i = m_fieldUsed; i < m_fieldBoxes.Count; ++i)
 			{
-				if(m_fieldBoxes[i].Visible) m_fieldBoxes[i].Visible = false;
+				if(m_fieldBoxes[i].Visible)
+				{
+					m_fieldBoxes[i].Visible = false;
+					m_fieldBoxes[i].Text = string.Empty;
+				}
 			}
 		}
 
@@ -1563,10 +1665,9 @@ namespace FluentTheme
 			if((h == null) || (h.Click == null)) return;
 			try
 			{
-				m_copyOk = true;
+				m_copyRes = CopyResult.Ok;
 				h.Click();
-				if(h.IsCopy && !m_copyOk)
-					ShowWarning(L.T("Das Kopieren ist fehlgeschlagen. Der Wert liegt nicht in der Zwischenablage."));
+				if(h.IsCopy && (m_copyRes != CopyResult.Ok)) ShowCopyError(m_copyRes);
 				else if(h.IsCopy)
 				{
 					m_clearSeconds = KpCompat.ClipboardClearSeconds();
