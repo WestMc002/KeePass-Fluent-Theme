@@ -48,6 +48,34 @@ namespace FluentTheme
 			}
 		}
 
+		private bool m_strikeExpired = true;
+		private Font m_noStrike, m_noStrikeSrc;
+
+		/// <summary>KeePass schreibt abgelaufene Einträge durchgestrichen. Aus: normale Schrift, das
+		/// Badge „Abgelaufen“ bleibt.</summary>
+		public bool StrikeExpired
+		{
+			get { return m_strikeExpired; }
+			set
+			{
+				if(value == m_strikeExpired) return;
+				m_strikeExpired = value;
+				m_lv.Invalidate();
+			}
+		}
+
+		/// <summary>Dieselbe Schrift ohne Durchstreichung (einmal erzeugt und wiederverwendet).</summary>
+		private Font NoStrike(Font f)
+		{
+			if((m_noStrike == null) || !object.ReferenceEquals(m_noStrikeSrc, f))
+			{
+				if(m_noStrike != null) m_noStrike.Dispose();
+				m_noStrike = new Font(f, f.Style & ~FontStyle.Strikeout);
+				m_noStrikeSrc = f;
+			}
+			return m_noStrike;
+		}
+
 		private static Type s_tagType;
 		private static PropertyInfo s_tagEntryProp;
 
@@ -327,6 +355,7 @@ namespace FluentTheme
 				if((pe != null) && !pe.ForegroundColor.IsEmpty)
 					fc = (m_p.Dark ? Palette.Blend(pe.ForegroundColor, Color.White, 0.45) : pe.ForegroundColor);
 				Font f = (item.Font ?? m_lv.Font);
+				if(!m_strikeExpired && f.Strikeout) f = NoStrike(f);
 
 				// Spalten in Anzeigereihenfolge
 				int n = m_lv.Columns.Count;

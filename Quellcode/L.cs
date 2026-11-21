@@ -105,6 +105,8 @@ namespace FluentTheme
 			{ " (Standard)", " (default)" },
 			{ "Hover-Effekt in der Eintragsliste", "Hover effect in the entry list" },
 			{ "Ablaufende Einträge hervorheben", "Highlight expiring entries" },
+			{ "Abgelaufene Einträge durchstreichen", "Strike through expired entries" },
+			{ "Fensterrahmen der Dialoge wie im Hauptfenster", "Dialog window frames like the main window" },
 			{ "Nur abgelaufene", "Expired only" },
 			{ "Bis {0} Tage vorher", "Up to {0} days before" },
 			{ "Moderne Symbole in der Symbolleiste", "Modern toolbar icons" },
@@ -112,6 +114,11 @@ namespace FluentTheme
 			{ "Fehlerbericht kopieren", "Copy error report" },
 			{ "Der Fehlerbericht wurde in die Zwischenablage kopiert.", "The error report has been copied to the clipboard." },
 			{ "Info über Fluent Theme …", "About Fluent Theme …" },
+			{ "Fluent-Design einschalten", "Turn on Fluent design" },
+			{ "Fluent-Design ausschalten (KeePass-Standard)", "Turn off Fluent design (KeePass default)" },
+			{ "Das Fluent-Design ab dem nächsten Start von KeePass ausschalten?", "Turn off the Fluent design from the next start of KeePass?" },
+			{ "Das Fluent-Design ab dem nächsten Start von KeePass wieder einschalten?", "Turn the Fluent design back on from the next start of KeePass?" },
+			{ "Die Änderung wird nach einem Neustart von KeePass wirksam.", "The change takes effect after restarting KeePass." },
 			{ "Info über Fluent Theme", "About Fluent Theme" },
 
 			// Kopfzeilen von Gruppenbaum und Eintragsliste

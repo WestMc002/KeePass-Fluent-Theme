@@ -32,8 +32,15 @@ namespace FluentTheme
 		private const string CfgReveal = "FluentTheme.RevealSeconds";
 		private const string CfgColumns = "FluentTheme.DetailsColumns";
 		private const string CfgExpiryDays = "FluentTheme.ExpiryWarnDays";
+		private const string CfgStrikeExpired = "FluentTheme.StrikeExpired";
+		private const string CfgNormalFrames = "FluentTheme.DialogNormalFrames";
 		private const string CfgShowVersion = "FluentTheme.ShowVersion";
 		private const string CfgMoreLinks = "FluentTheme.FieldLinksMoreSchemes";
+		private const string CfgDisabled = "FluentTheme.Disabled";
+
+		/// <summary>Design ausgeschaltet: Das Plugin verändert nichts, es bietet nur den Menüpunkt
+		/// zum Wiedereinschalten an. Wirksam nach einem Neustart von KeePass.</summary>
+		private bool m_disabled;
 
 		private static string s_lastError;
 		private static string s_toolbarInfo = string.Empty;
@@ -123,6 +130,11 @@ namespace FluentTheme
 				if(!ScreenshotRunner.UsesLocalConfig(shotDir)) Environment.Exit(1);
 				ScreenshotRunner.PrepareConfig();
 			}
+			else if(host.CustomConfig.GetBool(CfgDisabled, false))
+			{
+				m_disabled = true;
+				return true;
+			}
 
 			try
 			{
@@ -206,6 +218,7 @@ namespace FluentTheme
 
 		public override void Terminate()
 		{
+			if(m_disabled) return;
 			try
 			{
 				SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
@@ -366,7 +379,11 @@ namespace FluentTheme
 				else RemoveBadge();
 				StyleMainToolbar();
 				StyleTabs();
-				if(m_dialogs != null) m_dialogs.Update(m_p, m_s);
+				if(m_dialogs != null)
+				{
+					m_dialogs.NormalFrames = this.NormalFrames;
+					m_dialogs.Update(m_p, m_s);
+				}
 				if(m_treeScroll != null) m_treeScroll.Update(m_p, m_s);
 				if(m_listScroll != null) m_listScroll.Update(m_p, m_s);
 				StyleMenuBar();
@@ -416,6 +433,7 @@ namespace FluentTheme
 				if(m_painter != null)
 				{
 					m_painter.ExpiryDays = this.ExpiryDays;
+					m_painter.StrikeExpired = this.StrikeExpired;
 					m_painter.Update(m_p, m_s, this.RowHeight, this.ListHover);
 				}
 
@@ -849,6 +867,18 @@ namespace FluentTheme
 		}
 
 		/// <summary>Tage, ab denen ablaufende Einträge ein oranges Badge bekommen (0 = aus).</summary>
+		/// <summary>Abgelaufene Einträge in der Liste durchstreichen (Standard: an, wie KeePass).</summary>
+		private bool StrikeExpired
+		{
+			get { return m_host.CustomConfig.GetBool(CfgStrikeExpired, true); }
+		}
+
+		/// <summary>Dialoge von KeePass mit normalem Fensterrahmen anzeigen (Standard: an).</summary>
+		private bool NormalFrames
+		{
+			get { return m_host.CustomConfig.GetBool(CfgNormalFrames, true); }
+		}
+
 		private int ExpiryDays
 		{
 			get
@@ -1006,6 +1036,14 @@ namespace FluentTheme
 			root.Image = AppIcon.GetImage(AppIcon.SmallSize);
 			m_menuRoot = root;
 
+			if(m_disabled)
+			{
+				ToolStripMenuItem miOn = new ToolStripMenuItem(L.T("Fluent-Design einschalten"));
+				miOn.Click += delegate { SetDisabled(false); };
+				root.DropDownItems.Add(miOn);
+				return root;
+			}
+
 			ToolStripMenuItem miSys = new ToolStripMenuItem(L.T("Wie Windows (automatisch)"));
 			miSys.Click += delegate { SetMode(ThemeMode.System); };
 			ToolStripMenuItem miLight = new ToolStripMenuItem(L.T("Hell"));
@@ -1131,6 +1169,22 @@ namespace FluentTheme
 				miExpiry.DropDownItems.Add(mi);
 			}
 			root.DropDownItems.Add(miExpiry);
+
+			ToolStripMenuItem miStrike = new ToolStripMenuItem(L.T("Abgelaufene Einträge durchstreichen"));
+			miStrike.Click += delegate
+			{
+				m_host.CustomConfig.SetBool(CfgStrikeExpired, !this.StrikeExpired);
+				if(m_painter != null) m_painter.StrikeExpired = this.StrikeExpired;
+			};
+			root.DropDownItems.Add(miStrike);
+			ToolStripMenuItem miFrames = new ToolStripMenuItem(L.T("Fensterrahmen der Dialoge wie im Hauptfenster"));
+			miFrames.Click += delegate
+			{
+				m_host.CustomConfig.SetBool(CfgNormalFrames, !this.NormalFrames);
+				if(m_dialogs != null) m_dialogs.NormalFrames = this.NormalFrames;
+			};
+			root.DropDownItems.Add(miFrames);
+
 			ToolStripMenuItem miIcons = new ToolStripMenuItem(L.T("Moderne Symbole in der Symbolleiste"));
 			miIcons.Click += delegate
 			{
@@ -1159,6 +1213,9 @@ namespace FluentTheme
 					"Fluent Theme", MessageBoxButtons.OK, MessageBoxIcon.Information);
 			};
 			root.DropDownItems.Add(miErr);
+			ToolStripMenuItem miOff = new ToolStripMenuItem(L.T("Fluent-Design ausschalten (KeePass-Standard)"));
+			miOff.Click += delegate { SetDisabled(true); };
+			root.DropDownItems.Add(miOff);
 
 			root.DropDownItems.Add(new ToolStripSeparator());
 			ToolStripMenuItem miAbout = new ToolStripMenuItem(L.T("Info über Fluent Theme …"));
@@ -1196,6 +1253,8 @@ namespace FluentTheme
 				miLinks.Checked = this.MoreLinks;
 				miLinks.Enabled = this.ModernDetails;
 				miHover.Checked = this.ListHover;
+				miStrike.Checked = this.StrikeExpired;
+				miFrames.Checked = this.NormalFrames;
 				int ed = this.ExpiryDays;
 				foreach(ToolStripMenuItem mi in expiryItems) mi.Checked = ((int)mi.Tag == ed);
 				miIcons.Checked = this.ModernIcons;
@@ -1205,6 +1264,23 @@ namespace FluentTheme
 			};
 
 			return root;
+		}
+
+		/// <summary>Design aus- oder einschalten. Das Umstellen im laufenden Betrieb würde nicht alles
+		/// sauber zurücksetzen, deshalb gilt es ab dem nächsten Start von KeePass.</summary>
+		private void SetDisabled(bool off)
+		{
+			try
+			{
+				string q = (off ? L.T("Das Fluent-Design ab dem nächsten Start von KeePass ausschalten?") :
+					L.T("Das Fluent-Design ab dem nächsten Start von KeePass wieder einschalten?")) +
+					Environment.NewLine + Environment.NewLine +
+					L.T("Die Änderung wird nach einem Neustart von KeePass wirksam.");
+				if(MessageBox.Show(m_host.MainWindow, q, "Fluent Theme", MessageBoxButtons.OKCancel,
+					MessageBoxIcon.Question) != DialogResult.OK) return;
+				m_host.CustomConfig.SetBool(CfgDisabled, off);
+			}
+			catch(Exception ex) { Report(ex); }
 		}
 
 		private static Image MakeSwatch(Color c)

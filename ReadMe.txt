@@ -89,9 +89,14 @@ All settings are in the menu Tools > Fluent Design:
 - Hide revealed password again (10, 15, 30, 60 seconds or never)
 - Hover effect in the entry list and group tree
 - Highlight expiring entries (7, 14, 30 days before or expired only)
+- Strike through expired entries (default: on, as in KeePass)
+- Dialog window frames like the main window (default: on; applies to
+  windows opened afterwards)
 - Modern toolbar icons
 - Version in the status bar (show or hide)
 - Copy error report (only in case of problems)
+- Turn off Fluent design (KeePass default; takes effect after restarting
+  KeePass, afterwards the menu only offers "Turn on Fluent design")
 - About Fluent Theme
 
 KeePass stores the settings in its configuration file

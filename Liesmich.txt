@@ -89,9 +89,14 @@ Alle Einstellungen stehen im Menü Extras > Fluent-Design:
 - Angezeigtes Passwort wieder verbergen (10, 15, 30, 60 Sekunden oder nie)
 - Hover-Effekt in Eintragsliste und Gruppenbaum
 - Ablaufende Einträge hervorheben (7, 14, 30 Tage vorher oder nur abgelaufene)
+- Abgelaufene Einträge durchstreichen (Standard: an, wie in KeePass)
+- Fensterrahmen der Dialoge wie im Hauptfenster (Standard: an; gilt für
+  Fenster, die danach geöffnet werden)
 - Moderne Symbole in der Symbolleiste
 - Version in der Statusleiste (ein- oder ausblenden)
 - Fehlerbericht kopieren (nur bei Problemen)
+- Fluent-Design ausschalten (KeePass-Standard; gilt nach einem Neustart
+  von KeePass, danach steht im Menü nur noch "Fluent-Design einschalten")
 - Info über Fluent Theme
 
 Die Einstellungen speichert KeePass in seiner Konfigurationsdatei

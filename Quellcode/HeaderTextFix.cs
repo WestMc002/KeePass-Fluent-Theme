@@ -186,9 +186,11 @@ namespace FluentTheme
 
 					int sort = NativeMethods.GetHeaderSort(hdr, index);
 					int arrow = ((sort != 0) ? (int)Math.Round(14 * k) : 0);
-					Rectangle tr = Rectangle.FromLTRB(rc.Left + pad, rc.Top, Math.Max(rc.Left + pad, rc.Right - pad - arrow), rc.Bottom - 1);
+					// Text an derselben Stelle wie bei Windows (bündig mit dem Text der Einträge darunter)
+					int tpad = (int)Math.Round(4 * k);
+					Rectangle tr = Rectangle.FromLTRB(rc.Left + tpad, rc.Top, Math.Max(rc.Left + tpad, rc.Right - tpad - arrow), rc.Bottom - 1);
 					TextFormatFlags tf = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
-						TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+						TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
 					if(al == HorizontalAlignment.Right) tf |= TextFormatFlags.Right;
 					else if(al == HorizontalAlignment.Center) tf |= TextFormatFlags.HorizontalCenter;
 					TextRenderer.DrawText(g, text, m_lv.Font, tr, m_text, tf);

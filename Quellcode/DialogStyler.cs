@@ -131,7 +131,87 @@ namespace FluentTheme
 			if(!m_styled.Add(f)) return;
 			f.Disposed += OnFormDisposed;
 			f.HandleCreated += OnFormHandleCreated;
+			if(this.NormalFrames) NormalFrame(f);
 			ApplyForm(f);
+		}
+
+		/// <summary>Dialoge von KeePass mit normalem Fensterrahmen statt festem Rahmen anzeigen, damit
+		/// das Symbol in der Titelleiste so sitzt wie im Hauptfenster. Die Größe bleibt gesperrt.
+		/// Gilt für Fenster, die danach geöffnet werden.</summary>
+		public bool NormalFrames { get; set; }
+
+		private static void NormalFrame(Form f)
+		{
+			try
+			{
+				FormBorderStyle bs = f.FormBorderStyle;
+				if((bs != FormBorderStyle.FixedDialog) && (bs != FormBorderStyle.FixedSingle) &&
+					(bs != FormBorderStyle.Fixed3D)) return;
+				// Der Inhalt behält seine Größe, das Fenster wird außen um den breiteren Rahmen größer
+				Size cs = f.ClientSize;
+				f.FormBorderStyle = FormBorderStyle.Sizable;
+				f.SizeGripStyle = SizeGripStyle.Hide;
+				if(f.ClientSize != cs) f.ClientSize = cs;
+				new FrameLock(f);
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Sperrt bei einem Fenster mit normalem Rahmen das Ändern der Größe durch den
+		/// Benutzer (Rand ziehen, Systemmenü). KeePass selbst darf die Größe weiterhin setzen.</summary>
+		private sealed class FrameLock : NativeWindow
+		{
+			private const int WM_NCHITTEST = 0x0084;
+			private const int WM_SYSCOMMAND = 0x0112;
+			private const int SC_SIZE = 0xF000;
+			private const int HTCAPTION = 2, HTLEFT = 10, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14,
+				HTBOTTOMRIGHT = 17, HTBORDER = 18;
+
+			private readonly Form m_f;
+
+			public FrameLock(Form f)
+			{
+				m_f = f;
+				m_f.HandleCreated += OnHandleCreated;
+				m_f.Disposed += OnDisposed;
+				if(m_f.IsHandleCreated) AssignHandle(m_f.Handle);
+			}
+
+			private void OnHandleCreated(object sender, EventArgs e)
+			{
+				try
+				{
+					if(this.Handle == m_f.Handle) return;
+					if(this.Handle != IntPtr.Zero) ReleaseHandle();
+					AssignHandle(m_f.Handle);
+				}
+				catch(Exception ex) { FluentThemeExt.Report(ex); }
+			}
+
+			private void OnDisposed(object sender, EventArgs e)
+			{
+				m_f.HandleCreated -= OnHandleCreated;
+				m_f.Disposed -= OnDisposed;
+				try { if(this.Handle != IntPtr.Zero) ReleaseHandle(); }
+				catch(Exception) { }
+			}
+
+			protected override void WndProc(ref Message m)
+			{
+				if((m.Msg == WM_SYSCOMMAND) && (((int)(m.WParam.ToInt64() & 0xFFF0)) == SC_SIZE)) return;
+				base.WndProc(ref m);
+				if(m.Msg == WM_NCHITTEST)
+				{
+					int hit = (int)m.Result.ToInt64();
+					if((hit >= HTLEFT) && (hit <= HTBOTTOMRIGHT))
+					{
+						// Oberer Rand zählt zur Titelleiste (Fenster bleibt dort verschiebbar), der Rest
+						// ist nur Rand ohne Funktion
+						bool top = ((hit == HTTOP) || (hit == HTTOPLEFT) || (hit == HTTOPRIGHT));
+						m.Result = new IntPtr(top ? HTCAPTION : HTBORDER);
+					}
+				}
+			}
 		}
 
 		private void OnFormDisposed(object sender, EventArgs e)
@@ -353,10 +433,24 @@ namespace FluentTheme
 						TabControl t2 = tc;
 						// später hinzugefügte Tabs (Plugins): Abstand nur noch verkleinern, nie vergrößern –
 						// das Ändern des Abstands legt das Steuerelement neu an, ein Hin und Her würde hängen
-						tc.ControlAdded += delegate { BeginFitTabs(t2); };
+						Form f2 = f;
+						tc.ControlAdded += delegate(object sender, ControlEventArgs e)
+						{
+							BeginFitTabs(t2);
+							// Tab eines Plugins (z. B. Kee, WindowsHello): Seite samt Inhalt ebenfalls
+							// gestalten – sonst bleibt sie hell, während die Schrift hell geerbt wird
+							if(e.Control is TabPage) BeginStyleTabs(t2, f2);
+						};
 						tc.Disposed += delegate { m_fitTabs.Remove(t2); };
 					}
 					painter.Underline = true;
+					if(m_shiftedTabs.Add(tc))
+					{
+						TabControl t4 = tc;
+						tc.Disposed += delegate { m_shiftedTabs.Remove(t4); };
+						ShiftPages(tc, painter);
+					}
+					BeginCenterPages(tc);
 					painter.Update(p, m_s, tc.Font, bold);
 				}
 				else if(c is LinkLabel)
@@ -420,6 +514,93 @@ namespace FluentTheme
 		}
 
 		/// <summary>Registerkarten-Inhalt als Karte: runde Ecken in Fensterfarbe, feiner Rahmen.</summary>
+		private readonly HashSet<TabPage> m_centeredPages = new HashSet<TabPage>();
+
+		/// <summary>Erst nach dem Laden ausführen, wenn KeePass und andere Plugins die endgültige
+		/// Größe gesetzt haben.</summary>
+		private void BeginCenterPages(TabControl tc)
+		{
+			try
+			{
+				if(tc.IsHandleCreated && !tc.IsDisposed)
+					tc.BeginInvoke(new MethodInvoker(delegate
+					{
+						if((m_p == null) || tc.IsDisposed) return;
+						foreach(TabPage tp in tc.TabPages) CenterPage(tc, tp);
+					}));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Inhalt einer Seite waagerecht mittig setzen: Wird das Fenster breiter als in der
+		/// Vorlage, wachsen die Elemente nicht mit und rechts bleibt mehr Rand als links. Dann
+		/// werden breite Elemente (über die Mitte hinaus) um die Differenz verbreitert und Elemente
+		/// in der rechten Hälfte (Knöpfe) verschoben, so dass rechts derselbe Rand wie links bleibt.</summary>
+		private void CenterPage(TabControl tc, TabPage tp)
+		{
+			try
+			{
+				if(tp.IsDisposed || !m_centeredPages.Add(tp)) return;
+				tp.Disposed += delegate { m_centeredPages.Remove(tp); };
+
+				int w = tc.DisplayRectangle.Width;
+				if((w <= 0) || (tp.Controls.Count == 0)) return;
+				int left = int.MaxValue, right = 0;
+				foreach(Control c in tp.Controls)
+				{
+					// angedockte oder rechts verankerte Elemente: Seite ist schon flexibel angelegt
+					if((c.Dock != DockStyle.None) || ((c.Anchor & AnchorStyles.Right) != 0)) return;
+					// Beschriftungen zählen nicht mit: sie sind oft breiter angelegt als ihr Text
+					if(c is Label) continue;
+					right = Math.Max(right, c.Right);
+					left = Math.Min(left, c.Left);
+				}
+				if((left == int.MaxValue) || (right <= 0)) return;
+				int d = (w - right) - left;
+				if((d < (int)Math.Round(3 * m_s)) || (d > w / 5)) return;
+
+				int mid = w / 2;
+				tp.SuspendLayout();
+				try
+				{
+					foreach(Control c in tp.Controls)
+					{
+						if(c.Right <= mid) continue;
+						if(c.Left >= mid) c.Left += d;
+						else if(!c.AutoSize && !(c is Label))
+						{
+							// Listen: Spalten, die die Breite füllen, mitwachsen lassen (letzte Spalte)
+							ListView lv = (c as ListView);
+							int fill = -1;
+							if((lv != null) && (lv.View == View.Details) && (lv.Columns.Count > 0))
+							{
+								int sum = 0;
+								foreach(ColumnHeader ch in lv.Columns) sum += ch.Width;
+								if(sum >= lv.ClientSize.Width - (int)Math.Round(30 * m_s)) fill = lv.Columns.Count - 1;
+							}
+							c.Width += d;
+							if(fill >= 0) lv.Columns[fill].Width += d;
+						}
+					}
+				}
+				finally { tp.ResumeLayout(); }
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		private void BeginStyleTabs(TabControl tc, Form f)
+		{
+			try
+			{
+				if(tc.IsHandleCreated && !tc.IsDisposed)
+					tc.BeginInvoke(new MethodInvoker(delegate
+					{
+						if((m_p != null) && !tc.IsDisposed) ApplyControl(tc, f);
+					}));
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
 		private void BeginFitTabs(TabControl tc)
 		{
 			try
@@ -463,10 +644,102 @@ namespace FluentTheme
 				}
 				else if(n > 0) return; // ohne Maße nichts ändern
 				if(!allowGrow) padX = Math.Min(padX, tc.Padding.X);
-				if((tc.Padding.X != padX) || (tc.Padding.Y < padY)) tc.Padding = new Point(padX, Math.Max(padY, tc.Padding.Y));
+				if((tc.Padding.X != padX) || (tc.Padding.Y < padY))
+				{
+					int before = (tc.IsHandleCreated ? tc.DisplayRectangle.Height : 0);
+					tc.Padding = new Point(padX, Math.Max(padY, tc.Padding.Y));
+					int after = (tc.IsHandleCreated ? tc.DisplayRectangle.Height : 0);
+					// Die höhere Tab-Leiste nimmt den Seiten Höhe weg – ohne Ausgleich wird der untere
+					// Rand eng gesetzter Seiten abgeschnitten (z. B. im Passwort-Generator)
+					// Nur so viel ausgleichen, wie der Inhalt braucht (einheitlicher Rand unten), sonst
+					// bleibt in manchen Dialogen unten zu viel Platz
+					if((before > 0) && (after > 0) && (before > after) && m_grownTabs.Add(tc))
+					{
+						TabControl t3 = tc;
+						tc.Disposed += delegate { m_grownTabs.Remove(t3); };
+						int need = ContentBottom(tc) + (int)Math.Round(8 * m_s) - after;
+						if(need > 0) GrowForTabs(tc, need);
+					}
+				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 			finally { m_fitting = false; }
+		}
+
+		private readonly HashSet<TabControl> m_grownTabs = new HashSet<TabControl>();
+
+		/// <summary>Unterkante des tiefsten festen Elements auf allen Seiten (frei angeordnete
+		/// Elemente; angedockte und unten verankerte passen sich selbst an).</summary>
+		private static int ContentBottom(TabControl tc)
+		{
+			int b = 0;
+			foreach(TabPage tp in tc.TabPages)
+			{
+				foreach(Control c in tp.Controls)
+				{
+					if((c.Dock != DockStyle.None) || ((c.Anchor & AnchorStyles.Bottom) != 0)) continue;
+					b = Math.Max(b, c.Bottom);
+				}
+			}
+			return b;
+		}
+		private readonly HashSet<TabControl> m_shiftedTabs = new HashSet<TabControl>();
+
+		/// <summary>Seiten etwas tiefer beginnen lassen (mehr Luft unter der Trennlinie der Tab-Leiste)
+		/// und die Registerkarten um denselben Wert nach unten verlängern, damit die Seiten ihre Höhe
+		/// behalten. Der Abstand oben und unten wird so gleichmäßiger. Nur wenn unten genug Platz ist.</summary>
+		private void ShiftPages(TabControl tc, TabStripPainter painter)
+		{
+			try
+			{
+				Control par = tc.Parent;
+				if((par == null) || (tc.Dock != DockStyle.None) || !tc.IsHandleCreated) return;
+				int k = (int)Math.Round(4 * m_s);
+				int limit = par.ClientSize.Height;
+				foreach(Control c in par.Controls)
+				{
+					if((c == tc) || !c.Visible) continue;
+					if((c.Right <= tc.Left) || (c.Left >= tc.Right)) continue; // nicht unterhalb
+					if(c.Top >= tc.Bottom - (int)Math.Round(2 * m_s)) limit = Math.Min(limit, c.Top);
+				}
+				if(limit - tc.Bottom >= k + (int)Math.Round(4 * m_s)) tc.Height += k;
+				// zu eng (z. B. Suchfeld direkt unter den Optionen): stattdessen das Fenster höher machen
+				// und alles darunter nach unten schieben – so ist der Abstand in allen Dialogen gleich
+				else if(!GrowForTabs(tc, k)) return;
+				painter.ExtraTop = k;
+				tc.PerformLayout();
+				tc.Invalidate();
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+		}
+
+		/// <summary>Fenster und Registerkarten um d höher machen und alles darunter um d nach unten
+		/// schieben, damit die Seiten ihre ursprüngliche Höhe behalten. Nur wenn die Registerkarten
+		/// direkt im Fenster liegen; verankerte Elemente ordnet Windows Forms selbst neu an.</summary>
+		private bool GrowForTabs(TabControl tc, int d)
+		{
+			try
+			{
+				Form f = tc.FindForm();
+				if((f == null) || (tc.Parent != f) || (d <= 0) || (d > (int)Math.Round(40 * m_s))) return false;
+				if(f.WindowState != FormWindowState.Normal) return false;
+
+				int oldBottom = tc.Bottom;
+				List<Control> below = new List<Control>();
+				foreach(Control c in f.Controls)
+				{
+					if((c == tc) || ((c.Anchor & AnchorStyles.Bottom) != 0) || (c.Dock != DockStyle.None)) continue;
+					if(c.Top >= oldBottom - (int)Math.Round(2 * m_s)) below.Add(c);
+				}
+				bool tcAnchored = ((tc.Anchor & AnchorStyles.Bottom) != 0);
+
+				f.ClientSize = new Size(f.ClientSize.Width, f.ClientSize.Height + d);
+				if(!tcAnchored) tc.Height += d;
+				foreach(Control c in below) c.Top += d;
+				return true;
+			}
+			catch(Exception ex) { FluentThemeExt.Report(ex); }
+			return false;
 		}
 
 		private void OnCardPaint(object sender, PaintEventArgs e)
@@ -476,11 +749,14 @@ namespace FluentTheme
 			if((tp == null) || (p == null)) return;
 			try
 			{
-				Rectangle r = tp.ClientRectangle;
+				Rectangle full = tp.ClientRectangle;
+				// Karte oben etwas tiefer beginnen lassen: mehr Abstand zur Trennlinie der Tab-Leiste
+				int top = (int)Math.Round(2 * m_s);
+				Rectangle r = Rectangle.FromLTRB(full.Left, full.Top + top, full.Right, full.Bottom);
 				if((r.Width < 4) || (r.Height < 4)) return;
 				int rad = (int)Math.Round(8 * m_s);
 				using(GraphicsPath path = Gfx.Round(new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1), rad))
-				using(Region outside = new Region(r))
+				using(Region outside = new Region(full))
 				{
 					outside.Exclude(path);
 					using(SolidBrush b = new SolidBrush(p.Bg)) { e.Graphics.FillRegion(b, outside); }
