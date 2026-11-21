@@ -147,6 +147,16 @@ namespace FluentTheme
 				FormBorderStyle bs = f.FormBorderStyle;
 				if((bs != FormBorderStyle.FixedDialog) && (bs != FormBorderStyle.FixedSingle) &&
 					(bs != FormBorderStyle.Fixed3D)) return;
+				if(f.IsHandleCreated)
+				{
+					// Fenster existiert schon (KeePass meldet Dialoge erst beim Laden): FormBorderStyle
+					// würde das Fenster neu anlegen – es erschiene dann halb aufgebaut und alle Listen
+					// würden neu befüllt (langsam). Deshalb nur den Rahmen direkt umstellen.
+					FrameLock fl = new FrameLock(f);
+					fl.ThickFrame = true;
+					fl.ApplyThickFrame();
+					return;
+				}
 				// Der Inhalt behält seine Größe, das Fenster wird außen um den breiteren Rahmen größer
 				Size cs = f.ClientSize;
 				f.FormBorderStyle = FormBorderStyle.Sizable;
@@ -168,6 +178,56 @@ namespace FluentTheme
 				HTBOTTOMRIGHT = 17, HTBORDER = 18;
 
 			private readonly Form m_f;
+
+			private const int WM_STYLECHANGING = 0x007C;
+			private const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
+			private const int WS_THICKFRAME = 0x00040000, WS_EX_DLGMODALFRAME = 0x00000001;
+			private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004,
+				SWP_NOACTIVATE = 0x0010, SWP_FRAMECHANGED = 0x0020;
+
+			[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+			private struct STYLESTRUCT { public int styleOld; public int styleNew; }
+
+			[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+			private struct WRECT { public int Left, Top, Right, Bottom; }
+
+			[System.Runtime.InteropServices.DllImport("user32.dll")]
+			private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+			[System.Runtime.InteropServices.DllImport("user32.dll")]
+			private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+			[System.Runtime.InteropServices.DllImport("user32.dll")]
+			private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hAfter, int x, int y, int cx, int cy, uint flags);
+			[System.Runtime.InteropServices.DllImport("user32.dll")]
+			private static extern bool GetClientRect(IntPtr hWnd, out WRECT r);
+			[System.Runtime.InteropServices.DllImport("user32.dll")]
+			private static extern bool GetWindowRect(IntPtr hWnd, out WRECT r);
+
+			/// <summary>Rahmen ohne FormBorderStyle umgestellt: bei späteren Stiländerungen durch
+			/// Windows Forms den breiten Rahmen beibehalten.</summary>
+			public bool ThickFrame;
+
+			/// <summary>Breiten Rahmen direkt am Fenster setzen; der Inhalt behält seine Größe.</summary>
+			public void ApplyThickFrame()
+			{
+				IntPtr h = m_f.Handle;
+				WRECT c0, c1, w;
+				GetClientRect(h, out c0);
+				int st = GetWindowLong(h, GWL_STYLE);
+				int ex = GetWindowLong(h, GWL_EXSTYLE);
+				SetWindowLong(h, GWL_STYLE, st | WS_THICKFRAME);
+				SetWindowLong(h, GWL_EXSTYLE, ex & ~WS_EX_DLGMODALFRAME);
+				SetWindowPos(h, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+					SWP_NOACTIVATE | SWP_FRAMECHANGED);
+				GetClientRect(h, out c1);
+				int dw = (c0.Right - c0.Left) - (c1.Right - c1.Left);
+				int dh = (c0.Bottom - c0.Top) - (c1.Bottom - c1.Top);
+				if((dw != 0) || (dh != 0))
+				{
+					GetWindowRect(h, out w);
+					SetWindowPos(h, IntPtr.Zero, 0, 0, (w.Right - w.Left) + dw, (w.Bottom - w.Top) + dh,
+						SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+				}
+			}
 
 			public FrameLock(Form f)
 			{
@@ -199,6 +259,18 @@ namespace FluentTheme
 			protected override void WndProc(ref Message m)
 			{
 				if((m.Msg == WM_SYSCOMMAND) && (((int)(m.WParam.ToInt64() & 0xFFF0)) == SC_SIZE)) return;
+				if(this.ThickFrame && (m.Msg == WM_STYLECHANGING) && (m.LParam != IntPtr.Zero))
+				{
+					try
+					{
+						int which = (int)m.WParam.ToInt64();
+						STYLESTRUCT ss = (STYLESTRUCT)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(STYLESTRUCT));
+						if(which == GWL_STYLE) ss.styleNew |= WS_THICKFRAME;
+						else if(which == GWL_EXSTYLE) ss.styleNew &= ~WS_EX_DLGMODALFRAME;
+						System.Runtime.InteropServices.Marshal.StructureToPtr(ss, m.LParam, false);
+					}
+					catch(Exception ex) { FluentThemeExt.Report(ex); }
+				}
 				base.WndProc(ref m);
 				if(m.Msg == WM_NCHITTEST)
 				{
@@ -439,7 +511,8 @@ namespace FluentTheme
 							BeginFitTabs(t2);
 							// Tab eines Plugins (z. B. Kee, WindowsHello): Seite samt Inhalt ebenfalls
 							// gestalten – sonst bleibt sie hell, während die Schrift hell geerbt wird
-							if(e.Control is TabPage) BeginStyleTabs(t2, f2);
+							TabPage np = (e.Control as TabPage);
+							if(np != null) BeginStylePage(t2, np, f2);
 						};
 						tc.Disposed += delegate { m_fitTabs.Remove(t2); };
 					}
@@ -588,14 +661,34 @@ namespace FluentTheme
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
 		}
 
-		private void BeginStyleTabs(TabControl tc, Form f)
+		/// <summary>Nur die neue Seite gestalten (nicht den ganzen Dialog noch einmal).</summary>
+		private void BeginStylePage(TabControl tc, TabPage tp, Form f)
 		{
 			try
 			{
 				if(tc.IsHandleCreated && !tc.IsDisposed)
 					tc.BeginInvoke(new MethodInvoker(delegate
 					{
-						if((m_p != null) && !tc.IsDisposed) ApplyControl(tc, f);
+						Palette p = m_p;
+						if((p == null) || tc.IsDisposed || tp.IsDisposed) return;
+						try
+						{
+							tp.UseVisualStyleBackColor = false;
+							tp.BackColor = p.Card;
+							tp.ForeColor = p.Text;
+							if(m_cardPages.Add(tp))
+							{
+								tp.Paint += OnCardPaint;
+								tp.Resize += delegate { tp.Invalidate(); };
+								tp.Disposed += delegate { m_cardPages.Remove(tp); };
+							}
+							foreach(Control child in tp.Controls) ApplyControl(child, f);
+							HookContainer(tp, f);
+							CenterPage(tc, tp);
+							tp.Invalidate(true);
+							tc.Invalidate();
+						}
+						catch(Exception ex) { FluentThemeExt.Report(ex); }
 					}));
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
@@ -733,7 +826,9 @@ namespace FluentTheme
 				}
 				bool tcAnchored = ((tc.Anchor & AnchorStyles.Bottom) != 0);
 
-				f.ClientSize = new Size(f.ClientSize.Width, f.ClientSize.Height + d);
+				// Über die Fensterhöhe, nicht über ClientSize: Windows Forms rechnet ClientSize mit dem
+				// ursprünglichen festen Rahmen um und würde das Fenster sonst zu klein machen
+				f.Height += d;
 				if(!tcAnchored) tc.Height += d;
 				foreach(Control c in below) c.Top += d;
 				return true;
@@ -981,9 +1076,18 @@ namespace FluentTheme
 				}
 				else if(!string.IsNullOrEmpty(txt))
 				{
-					TextRenderer.DrawText(g, txt, m_b.Font, content, text, TextFormatFlags.HorizontalCenter |
-						TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis |
-						TextFormatFlags.HidePrefix);
+					// Einzeilig, solange der Text in den Knopf passt (notfalls mit weniger Innenabstand);
+					// umbrechen nur, wenn der Knopf hoch genug für zwei Zeilen ist
+					int one = TextRenderer.MeasureText(g, txt, m_b.Font, Size.Empty,
+						TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.HidePrefix).Width;
+					Rectangle area = content;
+					if((one > content.Width) && (one <= rc.Width - 4)) area = Rectangle.Inflate(rc, -2, -2);
+					bool twoLines = (content.Height >= 2 * m_b.Font.Height);
+					TextFormatFlags tf = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+						TextFormatFlags.EndEllipsis | TextFormatFlags.HidePrefix;
+					if(twoLines && (one > area.Width)) tf |= TextFormatFlags.WordBreak;
+					else tf |= TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+					TextRenderer.DrawText(g, txt, m_b.Font, area, text, tf);
 				}
 			}
 			catch(Exception ex) { FluentThemeExt.Report(ex); }
