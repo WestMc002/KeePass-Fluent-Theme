@@ -14,8 +14,9 @@ Screenshots/Fehler.txt
 *.kdb
 *.key
 *.keyx
-KeePass.config.xml
-KeePass.config.enforced.xml
+*.pfx
+*.snk
+KeePass.config*.xml
 
 # Windows
 Thumbs.db

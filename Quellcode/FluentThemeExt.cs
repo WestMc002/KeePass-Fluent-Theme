@@ -1272,12 +1272,13 @@ namespace FluentTheme
 		{
 			try
 			{
-				string q = (off ? L.T("Das Fluent-Design ab dem nächsten Start von KeePass ausschalten?") :
-					L.T("Das Fluent-Design ab dem nächsten Start von KeePass wieder einschalten?")) +
+				// Hinweis zuerst, die Frage als eigener Absatz am Ende (globale Vorgabe „Dialogfenster“)
+				string q = L.T("Die Änderung wird nach einem Neustart von KeePass wirksam.") +
 					Environment.NewLine + Environment.NewLine +
-					L.T("Die Änderung wird nach einem Neustart von KeePass wirksam.");
-				if(MessageBox.Show(m_host.MainWindow, q, "Fluent Theme", MessageBoxButtons.OKCancel,
-					MessageBoxIcon.Question) != DialogResult.OK) return;
+					(off ? L.T("Das Fluent-Design ab dem nächsten Start von KeePass ausschalten?") :
+					L.T("Das Fluent-Design ab dem nächsten Start von KeePass wieder einschalten?"));
+				if(MessageBox.Show(m_host.MainWindow, q, "Fluent Theme", MessageBoxButtons.YesNo,
+					MessageBoxIcon.Question) != DialogResult.Yes) return;
 				m_host.CustomConfig.SetBool(CfgDisabled, off);
 			}
 			catch(Exception ex) { Report(ex); }

@@ -29,7 +29,7 @@ The plugin speaks **English and German** and follows the language of KeePass.
 - **Windows accent color** or a custom accent color
 - **Modern interface:** menus with rounded corners, colored Fluent icons in the toolbar, tabs, slim scroll bars, modern search box with magnifier, messages and tooltips in the same design
 - **Group tree and entry list** with rounded selection, accent bar and hover effect; adjustable row height
-- **Expiry hints:** red badge “Expired”, orange badge “in x days” (time span adjustable)
+- **Expiry hints:** red badge “Expired”, orange badge “in x days” (time span adjustable); striking through expired entries can be turned off
 - **Entry details as cards**
   - credentials with copy, show and open buttons and password strength
   - **display of the one-time code (TOTP)** with countdown and copy button – reads KeePass' `TimeOtp-*` fields and an `otp` field in KeePassXC/KeeOtp format. Two-factor login is still set up in KeePass or a TOTP plugin; Fluent Theme only displays the code.
@@ -42,9 +42,9 @@ The plugin speaks **English and German** and follows the language of KeePass.
 - A revealed password is **hidden again automatically** after an adjustable time
 - The height of the entry details **adapts automatically** to the entry
 - **Adjustable card widths:** drag the gap between the cards; double-click resets to equal widths
-- **Restyled KeePass dialogs:** header, tabs, content on a card, consistent input fields with accent line, quality bar in traffic-light colors, buttons – for all KeePass dialogs (entry, group, options, password generator …)
+- **Restyled KeePass dialogs:** header, tabs, content on a card, consistent input fields with accent line, quality bar in traffic-light colors, buttons – for all KeePass dialogs (entry, group, options, password generator …), with the same window frame as the main window; tabs added by other plugins are styled too
 
-All settings: **Tools › Fluent Design**.
+All settings: **Tools › Fluent Design**. There you can also turn the design off (KeePass default, after a restart of KeePass).
 
 ### Installation
 
@@ -81,7 +81,7 @@ Das Plugin spricht **Deutsch und Englisch** und folgt der Sprache von KeePass.
 - **Windows-Akzentfarbe** oder eine eigene Akzentfarbe
 - **Moderne Oberfläche:** Menüs mit abgerundeten Ecken, farbige Fluent-Symbole in der Symbolleiste, Registerkarten, schmale Scrollleisten, modernes Suchfeld mit Lupe, Meldungen und Tooltips im selben Design
 - **Gruppenbaum und Eintragsliste** mit abgerundeter Auswahl, Akzentstreifen und Hover-Effekt; Zeilenhöhe einstellbar
-- **Ablauf-Hinweise:** rotes Badge „Abgelaufen“, oranges Badge „in x Tagen“ (Zeitspanne einstellbar)
+- **Ablauf-Hinweise:** rotes Badge „Abgelaufen“, oranges Badge „in x Tagen“ (Zeitspanne einstellbar); Durchstreichen abgelaufener Einträge abschaltbar
 - **Detailansicht als Karten**
   - Anmeldedaten mit Kopieren-, Anzeigen- und Öffnen-Knöpfen und Passwortstärke
   - **Anzeige des Einmalcodes (TOTP)** mit Countdown und Kopieren-Knopf – liest die `TimeOtp-*`-Felder von KeePass sowie ein Feld `otp` im Format von KeePassXC/KeeOtp. Eingerichtet wird die Zwei-Faktor-Anmeldung weiterhin in KeePass bzw. einem TOTP-Plugin; das Fluent Theme zeigt den Code nur an.
@@ -94,9 +94,9 @@ Das Plugin spricht **Deutsch und Englisch** und folgt der Sprache von KeePass.
 - Angezeigtes Passwort wird nach einstellbarer Zeit **automatisch wieder verborgen**
 - Höhe der Detailansicht passt sich **automatisch** an den Eintrag an
 - **Kartenbreiten verstellbar:** Lücke zwischen den Karten mit der Maus ziehen; Doppelklick macht sie wieder gleich breit
-- **Gestaltete KeePass-Dialoge:** Kopfbereich, Registerkarten, Inhalt auf einer Karte, einheitliche Eingabefelder mit Akzentlinie, Qualitätsbalken in Ampelfarben, Knöpfe – gilt für alle KeePass-Dialoge (Eintrag, Gruppe, Optionen, Passwort-Generator …)
+- **Gestaltete KeePass-Dialoge:** Kopfbereich, Registerkarten, Inhalt auf einer Karte, einheitliche Eingabefelder mit Akzentlinie, Qualitätsbalken in Ampelfarben, Knöpfe – gilt für alle KeePass-Dialoge (Eintrag, Gruppe, Optionen, Passwort-Generator …), mit demselben Fensterrahmen wie das Hauptfenster; auch Registerkarten anderer Plugins werden gestaltet
 
-Alle Einstellungen: **Extras › Fluent-Design**.
+Alle Einstellungen: **Extras › Fluent-Design**. Dort lässt sich das Design auch ausschalten (KeePass-Standard, nach einem Neustart von KeePass).
 
 ### Installation
 
