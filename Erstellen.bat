@@ -6,12 +6,15 @@ ECHO #                                     #
 ECHO #  Autor: Guenther Schoder            #
 ECHO #         www.westmc002.de            #
 ECHO #                                     #
-ECHO #  Datum: 29.10.2026 / 16.11.2026     #
+ECHO #  Datum: 29.10.2026 / 25.11.2026     #
 ECHO #######################################
 ECHO.
 
 CD /D "%~dp0"
 SET "RESULT=0"
+
+REM Nicht aus einer Sicherung starten (Backup\<Name> v<Version>\Erstellen.bat)
+FOR %%I IN ("%CD%\..") DO IF /I "%%~nxI"=="Backup" GOTO :ERR_INBACKUP
 
 REM Einstellungen (projektspezifisch)
 REM MAJOR     = Hauptversion
@@ -158,6 +161,12 @@ IF "%~1"=="" (
     powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '%~1' -Verb RunAs"
 )
 ENDLOCAL & EXIT /B 0
+
+:ERR_INBACKUP
+COLOR C0
+SET "RESULT=1"
+ECHO Fehler: Diese Erstellen.bat liegt in einer Sicherung - bitte die im Projektordner starten.
+GOTO :Ende
 
 :ERR_CSC
 COLOR C0
