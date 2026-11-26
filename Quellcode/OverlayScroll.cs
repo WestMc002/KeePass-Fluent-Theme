@@ -83,6 +83,12 @@ namespace FluentTheme
 		private bool m_sbVisible;
 		private bool m_hVisible;
 		private bool m_syncPending;
+		// Schutz gegen ein Hin und Her: Zeigt die Liste mit ausgeblendeten Leisten keine und ohne
+		// Ausblenden beide Leisten an (Inhalt passt genau in den Zwischenbereich), wechselt der
+		// Zustand sonst endlos – KeePass reagiert dann nicht mehr (Issue #7).
+		private int m_flips;
+		private int m_lastFlip;
+		private int m_holdUntil;
 		private SCROLLINFO m_info;
 		private SCROLLINFO m_hinfo;
 		private float m_s = 1f;
@@ -243,6 +249,32 @@ namespace FluentTheme
 			m_hinfo = hi;
 			if((vis != m_sbVisible) || (hvis != m_hVisible))
 			{
+				int now = Environment.TickCount;
+				if(unchecked(now - m_holdUntil) < 0)
+				{
+					// Zustand vorübergehend festgehalten (siehe unten): nur neu zeichnen
+					if(changed) m_bar.Invalidate();
+					if(hchanged) m_hbar.Invalidate();
+					return;
+				}
+				m_flips = ((unchecked(now - m_lastFlip) < 400) ? (m_flips + 1) : 0);
+				m_lastFlip = now;
+				if(m_flips >= 6)
+				{
+					// Hört nicht auf: beide Leisten ausblenden (alles bleibt erreichbar) und den
+					// Zustand eine Sekunde lang nicht mehr ändern
+					vis = true;
+					hvis = true;
+					m_holdUntil = unchecked(now + 1000);
+					m_flips = 0;
+				}
+				else if(m_flips >= 3)
+				{
+					// Hin und Her erkannt: senkrechte Leiste behalten, waagerechte nur, wenn beide
+					// Zustände sie brauchen – das ist in diesem Fall stabil
+					vis = (vis || m_sbVisible);
+					hvis = (hvis && m_hVisible);
+				}
 				m_sbVisible = vis;
 				m_hVisible = hvis;
 				DoLayout();
