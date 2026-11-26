@@ -10,6 +10,10 @@
 # englischer Abschnitt "Changes" unter den Änderungen.
 # Anhänge: FluentTheme.dll und zusätzlich ein ZIP mit DLL, Liesmich.txt und ReadMe.txt
 # (Browser blockieren einzelne DLL-Dateien häufiger als ein ZIP).
+# Vorabversion: Hand-Start auf dem Zweig "beta" mit vorab = true. Gebaut wird der Stand von
+# "beta", die Version steht in dessen keepass.version. Das Release heißt "v<Version>-vorab" und ist
+# als Pre-release markiert. keepass.version auf main bleibt unverändert, deshalb meldet KeePass
+# die Vorabversion niemandem als Update.
 
 name: Release
 
@@ -20,6 +24,11 @@ on:
       - keepass.version
       - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      vorab:
+        description: 'Vorabversion aus dem Zweig beta (nur zum Testen, keine Update-Meldung)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -38,7 +47,22 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $existing = @(gh release list --limit 200 --json tagName --jq '.[].tagName' | ForEach-Object { $_.TrimStart('v') })
+          # Vorabversion: nur den aktuellen Stand des Zweigs beta bauen, sonst nichts anfassen
+          if ('${{ inputs.vorab }}' -eq 'true') {
+            if ('${{ github.ref_name }}' -ne 'beta') { throw 'Vorabversionen nur aus dem Zweig beta (main bleibt unverändert)' }
+            $line = Get-Content keepass.version | Where-Object { $_ -match '^Fluent Theme:' } | Select-Object -First 1
+            $v = $line.Split(':')[1].Trim()
+            if ($v -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "Version in keepass.version unlesbar: '$v'" }
+            gh release view "v$v-vorab" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { throw "Vorabversion v$v-vorab gibt es schon" }
+            "build=$v=$env:GITHUB_SHA" >> $env:GITHUB_OUTPUT
+            "refresh=" >> $env:GITHUB_OUTPUT
+            "vorab=1" >> $env:GITHUB_OUTPUT
+            Write-Host "Vorabversion: $v aus $env:GITHUB_SHA"
+            exit 0
+          }
+          # Vorabversionen (Tag "...-vorab") gehören nicht zu den normalen Releases
+          $existing = @(gh release list --limit 200 --json tagName --jq '.[].tagName' | Where-Object { $_ -notlike '*-vorab' } | ForEach-Object { $_.TrimStart('v') })
           # Versionen aus der Geschichte von keepass.version (jeweils der erste Commit mit dieser Version)
           $build = New-Object System.Collections.Generic.List[string]
           $seen = @{}
@@ -90,7 +114,12 @@ jobs:
               $stepEn = "download and extract ``KeePass-Fluent-Theme-$ver.zip`` (or download only ``FluentTheme.dll``), close KeePass, copy ``FluentTheme.dll``"
             }
             $lineEn = "**Installation (English):** $stepEn into the ``Plugins`` folder of KeePass (e.g. ``C:\Program Files (x86)\KeePass\Plugins``) and start KeePass. To update, simply replace the existing ``FluentTheme.dll``."
-            $lines = @('## Änderungen', '') + $items + $changes + @(
+            $head = @()
+            if ('${{ steps.ver.outputs.vorab }}' -eq '1') {
+              $head = @('> **Vorabversion zum Testen.** KeePass meldet sie nicht als Update. Bitte nur installieren, wenn du darum gebeten wurdest.',
+                '> **Pre-release for testing.** KeePass does not offer it as an update. Please only install it if you were asked to.', '')
+            }
+            $lines = $head + @('## Änderungen', '') + $items + $changes + @(
               '',
               '## Installation',
               '',
@@ -155,6 +184,11 @@ jobs:
             foreach ($doc in @('Liesmich.txt', 'ReadMe.txt')) { if (Test-Path "$wt\$doc") { $zipIn += "$wt\$doc" } }
             Compress-Archive -Path $zipIn -DestinationPath $zipFile -Force
             if (-not (Test-Path $zipFile)) { throw "ZIP für v$ver konnte nicht erstellt werden" }
+            if ('${{ steps.ver.outputs.vorab }}' -eq '1') {
+              gh release create "v$ver-vorab" "$out\FluentTheme.dll" $zipFile --title "Fluent Theme $ver (Vorabversion)" --notes-file "notes\$ver.md" --target $sha --prerelease
+              if ($LASTEXITCODE -ne 0) { throw "Vorabversion v$ver-vorab konnte nicht angelegt werden" }
+              continue
+            }
             gh release create "v$ver" "$out\FluentTheme.dll" $zipFile --title "Fluent Theme $ver" --notes-file "notes\$ver.md" --target $sha
             if ($LASTEXITCODE -ne 0) {
               # Ältere Stände enthalten eine frühere Fassung dieses Workflows; dort darf das

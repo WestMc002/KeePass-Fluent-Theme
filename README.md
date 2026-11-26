@@ -35,8 +35,9 @@ The plugin speaks **English and German** and follows the language of KeePass.
   - **display of the one-time code (TOTP)** with countdown and copy button – reads KeePass' `TimeOtp-*` fields and an `otp` field in KeePassXC/KeeOtp format. Two-factor login is still set up in KeePass or a TOTP plugin; Fluent Theme only displays the code.
   - other fields (e.g. “URL 2”), clickable links
   - notes with copy button, long notes can be expanded
-  - **select text and copy parts of it** (Ctrl+C or right-click) in the notes, the user name and the other fields – not for passwords and protected fields
+  - **select text and copy parts of it** (Ctrl+C or right-click) in the title, the notes, the user name and the other fields – not for passwords and protected fields
   - open or save attachments with one click
+  - optionally more properties: last used, usage count, versions, UUID (copyable) and the notes of the group
   - clickable tags (shows all entries with that tag)
 - **“Copied” hint** with the time after which KeePass clears the clipboard
 - A revealed password is **hidden again automatically** after an adjustable time
@@ -87,8 +88,9 @@ Das Plugin spricht **Deutsch und Englisch** und folgt der Sprache von KeePass.
   - **Anzeige des Einmalcodes (TOTP)** mit Countdown und Kopieren-Knopf – liest die `TimeOtp-*`-Felder von KeePass sowie ein Feld `otp` im Format von KeePassXC/KeeOtp. Eingerichtet wird die Zwei-Faktor-Anmeldung weiterhin in KeePass bzw. einem TOTP-Plugin; das Fluent Theme zeigt den Code nur an.
   - weitere Felder (z. B. „URL 2“), Links anklickbar
   - Notizen mit Kopieren-Knopf, lange Notizen aufklappbar
-  - **Text markieren und einzeln kopieren** (Strg+C oder Rechtsklick) in den Notizen, beim Benutzernamen und in den weiteren Feldern – nicht bei Passwörtern und geschützten Feldern
+  - **Text markieren und einzeln kopieren** (Strg+C oder Rechtsklick) im Titel, in den Notizen, beim Benutzernamen und in den weiteren Feldern – nicht bei Passwörtern und geschützten Feldern
   - Anhänge per Klick öffnen oder speichern
+  - auf Wunsch weitere Eigenschaften: zuletzt verwendet, Verwendungen, Versionen, UUID (kopierbar) und die Notizen der Gruppe
   - Tags anklickbar (zeigt alle Einträge mit diesem Tag)
 - **„Kopiert“-Hinweis** mit der Zeit, nach der KeePass die Zwischenablage leert
 - Angezeigtes Passwort wird nach einstellbarer Zeit **automatisch wieder verborgen**

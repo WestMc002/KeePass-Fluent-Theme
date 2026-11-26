@@ -60,10 +60,12 @@ Features
   - other fields (e.g. "URL 2"), links are clickable
   - notes with copy button, long notes can be expanded
   - select text and copy parts of it (Ctrl+C or right-click): in the
-    notes, the user name and the other fields (not for passwords and
+    title, the notes, the user name and the other fields (not for passwords and
     protected fields)
   - open or save attachments with one click
   - created / modified / expires
+  - optionally more properties: last used, usage count, versions in the
+    history, UUID (copyable) and the notes of the group
 - After copying, "Copied" is shown briefly together with the number of
   seconds after which KeePass clears the clipboard
 - A revealed password is hidden again after an adjustable time
@@ -86,6 +88,7 @@ All settings are in the menu Tools > Fluent Design:
 - Adjust height of entry details automatically
 - More protocols clickable in additional fields (ftp, ssh …; default: off –
   then only http, https and www are clickable)
+- Show more properties (UUID, usage, group; default: off)
 - Hide revealed password again (10, 15, 30, 60 seconds or never)
 - Hover effect in the entry list and group tree
 - Highlight expiring entries (7, 14, 30 days before or expired only)

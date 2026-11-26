@@ -36,6 +36,7 @@ namespace FluentTheme
 		private const string CfgNormalFrames = "FluentTheme.DialogNormalFrames";
 		private const string CfgShowVersion = "FluentTheme.ShowVersion";
 		private const string CfgMoreLinks = "FluentTheme.FieldLinksMoreSchemes";
+		private const string CfgMoreProps = "FluentTheme.DetailsMoreProperties";
 		private const string CfgDisabled = "FluentTheme.Disabled";
 
 		/// <summary>Design ausgeschaltet: Das Plugin verändert nichts, es bietet nur den Menüpunkt
@@ -329,6 +330,12 @@ namespace FluentTheme
 			get { return m_host.CustomConfig.GetBool(CfgMoreLinks, false); }
 		}
 
+		/// <summary>Detailansicht: weitere Eigenschaften (UUID, Verwendung, Notizen der Gruppe; Standard: aus).</summary>
+		private bool MoreProps
+		{
+			get { return m_host.CustomConfig.GetBool(CfgMoreProps, false); }
+		}
+
 		/// <summary>Datenbank geschlossen oder gesperrt: Die Detailansicht vergisst den Eintrag sofort.</summary>
 		private void OnFileClosed(object sender, FileClosedEventArgs e)
 		{
@@ -448,6 +455,7 @@ namespace FluentTheme
 					m_details.SetPalette(m_p, m_s);
 					m_details.RevealSeconds = this.RevealSeconds;
 					m_details.MoreLinks = this.MoreLinks;
+					m_details.MoreProps = this.MoreProps;
 					m_details.Visible = this.ModernDetails;
 					if(m_details.Visible) m_details.BringToFront();
 					m_details.RefreshIfChanged(true);
@@ -1125,6 +1133,14 @@ namespace FluentTheme
 			};
 			root.DropDownItems.Add(miLinks);
 
+			ToolStripMenuItem miProps = new ToolStripMenuItem(L.T("Weitere Eigenschaften anzeigen (UUID, Verwendung, Gruppe)"));
+			miProps.Click += delegate
+			{
+				m_host.CustomConfig.SetBool(CfgMoreProps, !this.MoreProps);
+				ApplyAll();
+			};
+			root.DropDownItems.Add(miProps);
+
 			ToolStripMenuItem miReveal = new ToolStripMenuItem(L.T("Angezeigtes Passwort wieder verbergen"));
 			List<ToolStripMenuItem> revealItems = new List<ToolStripMenuItem>();
 			foreach(int sec in new int[] { 10, 15, 30, 60, 0 })
@@ -1252,6 +1268,8 @@ namespace FluentTheme
 				miAutoH.Enabled = this.ModernDetails;
 				miLinks.Checked = this.MoreLinks;
 				miLinks.Enabled = this.ModernDetails;
+				miProps.Checked = this.MoreProps;
+				miProps.Enabled = this.ModernDetails;
 				miHover.Checked = this.ListHover;
 				miStrike.Checked = this.StrikeExpired;
 				miFrames.Checked = this.NormalFrames;

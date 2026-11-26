@@ -81,6 +81,7 @@ namespace FluentTheme
 
 		private PwEntry m_entry;
 		private DateTime m_entryMod = DateTime.MinValue;
+		private ulong m_entryUse;
 		private int m_selCount = -1;
 		private bool m_reveal;
 		private int m_bits = -1;
@@ -317,7 +318,10 @@ namespace FluentTheme
 			}
 
 			DateTime mod = ((pe != null) ? pe.LastModificationTime : DateTime.MinValue);
-			if(!force && (pe == m_entry) && (mod == m_entryMod) && (cnt == m_selCount)) return;
+			// Verwendungen ändern sich ohne Änderungszeit (z. B. nach dem Kopieren) – für die
+			// weiteren Eigenschaften mit vergleichen
+			ulong use = (((pe != null) && this.MoreProps) ? pe.UsageCount : 0);
+			if(!force && (pe == m_entry) && (mod == m_entryMod) && (use == m_entryUse) && (cnt == m_selCount)) return;
 
 			if(pe != m_entry)
 			{
@@ -332,6 +336,7 @@ namespace FluentTheme
 			}
 			m_entry = pe;
 			m_entryMod = mod;
+			m_entryUse = use;
 			m_totp = Totp.FromEntry(pe);
 			m_totpBad = ((m_totp == null) && Totp.HasTotpField(pe));
 			UpdateTimer();
@@ -434,6 +439,11 @@ namespace FluentTheme
 		/// möglich, dann wird der Wert wie bisher gezeichnet.</summary>
 		private bool PlaceFieldBox(Graphics g, Rectangle rv, string text, Font font, Color color, string tip)
 		{
+			return PlaceFieldBox(g, rv, text, font, color, tip, m_p.Card);
+		}
+
+		private bool PlaceFieldBox(Graphics g, Rectangle rv, string text, Font font, Color color, string tip, Color back)
+		{
 			try
 			{
 				// TextRenderer rückt Text um diesen Zuschlag ein; das Textfeld hat keinen Rand
@@ -455,7 +465,7 @@ namespace FluentTheme
 					this.Controls.Add(b);
 				}
 				if(!object.ReferenceEquals(b.Font, font)) { b.Font = font; b.SetNoMargins(); }
-				if(b.BackColor != m_p.Card) b.BackColor = m_p.Card;
+				if(b.BackColor != back) b.BackColor = back;
 				if(b.ForeColor != color) b.ForeColor = color;
 				if(b.Text != text)
 				{
@@ -846,8 +856,12 @@ namespace FluentTheme
 			int titleW = Math.Max(D(40), cx - tx - D(8));
 			int ty = y + (tile - titleH - pathH) / 2;
 			string title = pe.Strings.ReadSafe(PwDefs.TitleField);
-			if(title.Length == 0) title = L.T("(ohne Titel)");
-			TextRenderer.DrawText(g, title, m_fTitle, new Rectangle(tx, ty, titleW, titleH), m_p.Text, TfLine);
+			Rectangle rTitle = new Rectangle(tx, ty, titleW, titleH);
+			// Titel markierbar (Strg+C oder Rechtsklick), wie Benutzername und Notizen
+			if(title.Length == 0)
+				TextRenderer.DrawText(g, L.T("(ohne Titel)"), m_fTitle, rTitle, m_p.Sub, TfLine);
+			else if(!PlaceFieldBox(g, rTitle, title, m_fTitle, m_p.Text, title, m_p.Bg))
+				TextRenderer.DrawText(g, title, m_fTitle, rTitle, m_p.Text, TfLine);
 			TextRenderer.DrawText(g, GroupPath(pe), m_fLabel, new Rectangle(tx, ty + titleH, titleW, pathH),
 				m_p.Sub, TfLine);
 			y += tile + D(12);
@@ -1280,6 +1294,10 @@ namespace FluentTheme
 		/// anbieten. cmd:// und file:// bleiben immer reiner Text, weil ein Klick Programme starten kann.</summary>
 		public bool MoreLinks { get; set; }
 
+		/// <summary>Weitere Eigenschaften in „Notizen und Info“: zuletzt verwendet, Verwendungen,
+		/// Versionen im Verlauf, UUID und die Notizen der Gruppe (Standard: aus).</summary>
+		public bool MoreProps { get; set; }
+
 		private bool LooksLikeUrl(string s)
 		{
 			if(string.IsNullOrEmpty(s)) return false;
@@ -1484,6 +1502,8 @@ namespace FluentTheme
 			}
 			y += this.MetaHeight;
 
+			if(this.MoreProps) y = MoreProperties(g, r, y, innerX, innerW, draw);
+
 			if(pe.Binaries.UCount > 0)
 			{
 				int lineH = m_fBase.Height + D(8);
@@ -1524,6 +1544,74 @@ namespace FluentTheme
 				y += D(6);
 			}
 			return y + D(2) - r.Top;
+		}
+
+		/// <summary>Weitere Eigenschaften (Option): zweite Zeile mit Verwendung und Verlauf, die UUID
+		/// zum Kopieren und die Notizen der Gruppe. Nur Anzeige – bearbeitet wird in KeePass.</summary>
+		private int MoreProperties(Graphics g, Rectangle r, int y, int innerX, int innerW, bool draw)
+		{
+			PwEntry pe = m_entry;
+			if(draw)
+			{
+				using(Pen p = new Pen(m_p.RowLine)) { g.DrawLine(p, r.Left + D(10), y, r.Right - D(10), y); }
+				int colW = innerW / 3;
+				MetaCell(g, innerX, y, colW, L.T("Zuletzt verwendet"), FmtDate(pe.LastAccessTime), m_p.Text,
+					FmtDateTime(pe.LastAccessTime));
+				MetaCell(g, innerX + colW, y, colW, L.T("Verwendungen"),
+					pe.UsageCount.ToString(CultureInfo.CurrentCulture), m_p.Text, null);
+				MetaCell(g, innerX + 2 * colW, y, innerW - 2 * colW, L.T("Versionen"),
+					pe.History.UCount.ToString(CultureInfo.CurrentCulture), m_p.Text, L.T("Ältere Versionen im Verlauf"));
+			}
+			y += this.MetaHeight;
+
+			// UUID mit Kopieren-Knopf
+			int bs = this.ButtonSize;
+			int lineH = Math.Max(m_fBase.Height + D(8), bs + D(4));
+			if(draw)
+			{
+				using(Pen p = new Pen(m_p.RowLine)) { g.DrawLine(p, r.Left + D(10), y, r.Right - D(10), y); }
+				string uuid = pe.Uuid.ToHexString();
+				int ly = y + D(4);
+				string lab = L.T("UUID");
+				int lw = TextWidth(g, lab, m_fLabel) + D(12);
+				TextRenderer.DrawText(g, lab, m_fLabel, new Rectangle(innerX, ly, lw, lineH), m_p.Sub, TfLine);
+				Rectangle rb = new Rectangle(r.Right - D(10) - bs, ly + (lineH - bs) / 2, bs, bs);
+				int vx = innerX + lw;
+				Rectangle rv = new Rectangle(vx, ly, Math.Max(0, rb.Left - D(8) - vx), lineH);
+				TextRenderer.DrawText(g, uuid, m_fBase, rv, m_p.Text, TfLine);
+				AddHit(rv, null, uuid);
+				DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("UUID kopieren"), delegate
+				{
+					m_copyRes = KpCompat.Copy(m_host, new ProtectedString(false, uuid), pe);
+				}));
+				if(rb == m_copiedRect) DrawCopiedLabel(g, rb, vx + D(40));
+			}
+			y += lineH + D(8);
+
+			// Notizen der Gruppe, in der der Eintrag liegt
+			PwGroup pg = pe.ParentGroup;
+			string gn = ((pg != null) ? (pg.Notes ?? string.Empty).Trim() : string.Empty);
+			if(gn.Length > 0)
+			{
+				TextFormatFlags nf = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak |
+					TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl | TextFormatFlags.EndEllipsis;
+				int maxH = m_fBase.Height * 4;
+				Size ns = TextRenderer.MeasureText(g, gn, m_fBase, new Size(innerW, int.MaxValue), nf);
+				int nh = Math.Min(ns.Height, maxH);
+				int labH = m_fLabel.Height + D(2);
+				if(draw)
+				{
+					using(Pen p = new Pen(m_p.RowLine)) { g.DrawLine(p, r.Left + D(10), y, r.Right - D(10), y); }
+					TextRenderer.DrawText(g, L.F("Notizen der Gruppe „{0}“", pg.Name), m_fLabel,
+						new Rectangle(innerX, y + D(8), innerW, labH), m_p.Sub, TfLine);
+					Rectangle rn = new Rectangle(innerX, y + D(8) + labH + D(4), innerW, nh);
+					TextRenderer.DrawText(g, gn, m_fBase, rn, m_p.Text, nf);
+					// Gekürzt: ganzer Text als Hinweis
+					if(ns.Height > maxH) AddHit(rn, null, (gn.Length > 1000) ? (gn.Substring(0, 1000) + " …") : gn);
+				}
+				y += D(8) + labH + D(4) + nh + D(10);
+			}
+			return y;
 		}
 
 		private void OpenAttachment(string name, ProtectedBinary pb)

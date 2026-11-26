@@ -60,10 +60,13 @@ Funktionen
   - weitere Felder (z. B. "URL 2"), Links sind anklickbar
   - Notizen mit Kopieren-Knopf, lange Notizen lassen sich aufklappen
   - Text markieren und einzeln kopieren (Strg+C oder Rechtsklick):
-    in den Notizen, beim Benutzernamen und in den weiteren Feldern
+    im Titel, in den Notizen, beim Benutzernamen und in den weiteren Feldern
     (nicht bei Passwörtern und geschützten Feldern)
   - Anhänge per Klick öffnen oder speichern
   - Erstellt / Geändert / Läuft ab
+  - auf Wunsch weitere Eigenschaften: zuletzt verwendet, Anzahl der
+    Verwendungen, Versionen im Verlauf, UUID (kopierbar) und die Notizen
+    der Gruppe
 - Nach dem Kopieren erscheint kurz "Kopiert" mit dem Hinweis, nach
   wie vielen Sekunden KeePass die Zwischenablage leert
 - Ein angezeigtes Passwort wird nach einstellbarer Zeit wieder
@@ -86,6 +89,7 @@ Alle Einstellungen stehen im Menü Extras > Fluent-Design:
 - Höhe der Detailansicht automatisch anpassen
 - Weitere Protokolle in Zusatzfeldern anklickbar (ftp, ssh …; Standard: aus –
   dann sind nur http, https und www anklickbar)
+- Weitere Eigenschaften anzeigen (UUID, Verwendung, Gruppe; Standard: aus)
 - Angezeigtes Passwort wieder verbergen (10, 15, 30, 60 Sekunden oder nie)
 - Hover-Effekt in Eintragsliste und Gruppenbaum
 - Ablaufende Einträge hervorheben (7, 14, 30 Tage vorher oder nur abgelaufene)
