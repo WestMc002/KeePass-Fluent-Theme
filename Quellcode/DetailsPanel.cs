@@ -295,6 +295,7 @@ namespace FluentTheme
 			m_rowH = Math.Max(D(30), m_fBase.Height + D(14));
 			if(m_notesBox != null) StyleNotesBox();
 			foreach(NotesBox fb in m_fieldBoxes) { fb.Font = m_fBase; fb.SetNoMargins(); }
+			ThemeScrollBars();
 			Invalidate();
 		}
 
@@ -762,6 +763,20 @@ namespace FluentTheme
 			if(string.IsNullOrEmpty(text)) return 0;
 			return TextRenderer.MeasureText(g, text, f, Size.Empty, TextFormatFlags.NoPrefix |
 				TextFormatFlags.SingleLine).Width;
+		}
+
+		protected override void OnHandleCreated(EventArgs e)
+		{
+			base.OnHandleCreated(e);
+			ThemeScrollBars();
+		}
+
+		// Die Bildlaufleiste der Detailansicht (erscheint bei kleinem Fenster) ist eine native
+		// Leiste und bliebe im Dunkelmodus hell (Issue #10)
+		private void ThemeScrollBars()
+		{
+			if(m_p == null) return;
+			NativeMethods.ThemeControl(this, m_p.Dark, "DarkMode_Explorer", "Explorer");
 		}
 
 		protected override void OnPaint(PaintEventArgs e)
