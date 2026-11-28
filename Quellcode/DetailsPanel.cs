@@ -1414,10 +1414,33 @@ namespace FluentTheme
 			int innerX = r.Left + D(16);
 			int innerW = Math.Max(D(40), r.Width - D(32));
 
-			string notes = pe.Strings.ReadSafe(PwDefs.NotesField);
+			// Speichergeschützte Notizen wie geschützte Zusatzfelder: verdeckt anzeigen und erst
+			// entschlüsseln, wenn sie bewusst angezeigt werden
+			ProtectedString psNotes = pe.Strings.Get(PwDefs.NotesField);
+			bool notesProt = ((psNotes != null) && psNotes.IsProtected);
+			bool notesMasked = (notesProt && !m_reveal);
+			bool hasNotes = ((psNotes != null) && !psNotes.IsEmpty);
+			string notes = ((hasNotes && !notesMasked) ? psNotes.ReadString() : string.Empty);
 			TextFormatFlags nf = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak |
 				TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl | TextFormatFlags.EndEllipsis;
-			if(notes.Length == 0)
+			if(hasNotes && notesMasked)
+			{
+				int bs = this.ButtonSize;
+				int lh = Math.Max(m_rowH, bs + D(4));
+				if(draw)
+				{
+					Rectangle rb = new Rectangle(r.Right - D(10) - bs, y + (lh - bs) / 2, bs, bs);
+					Rectangle re = new Rectangle(rb.Left - D(2) - bs, rb.Top, bs, bs);
+					TextRenderer.DrawText(g, Mask, m_fBase, new Rectangle(innerX, y, Math.Max(0, re.Left - D(8) - innerX), lh),
+						m_p.Text, TfLine);
+					DrawIconButton(g, re, new Btn(Glyph.Eye, L.T("Notizen anzeigen"), ToggleReveal));
+					DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("Notizen kopieren"),
+						delegate { CopyField(pe, PwDefs.NotesField); }));
+					if(rb == m_copiedRect) DrawCopiedLabel(g, rb, innerX + D(40));
+				}
+				y += lh + D(4);
+			}
+			else if(notes.Length == 0)
 			{
 				if(draw)
 					TextRenderer.DrawText(g, L.T("Keine Notizen"), m_fLabel, new Rectangle(innerX, y, innerW, m_rowH),
@@ -1429,7 +1452,9 @@ namespace FluentTheme
 				// Kopieren-Knopf rechts neben den Notizen
 				int bs = this.ButtonSize;
 				Rectangle rb = new Rectangle(r.Right - D(10) - bs, y, bs, bs);
-				int textW = Math.Max(D(40), rb.Left - D(8) - innerX);
+				// Geschützte, gerade angezeigte Notizen: Knopf zum Verbergen links neben dem Kopieren-Knopf
+				Rectangle re = (notesProt ? new Rectangle(rb.Left - D(2) - bs, y, bs, bs) : Rectangle.Empty);
+				int textW = Math.Max(D(40), (notesProt ? re.Left : rb.Left) - D(8) - innerX);
 
 				Size ns = TextRenderer.MeasureText(g, notes, m_fBase, new Size(textW, int.MaxValue), nf);
 				int collapsed = m_fBase.Height * 6;
@@ -1440,6 +1465,7 @@ namespace FluentTheme
 					Rectangle rn = new Rectangle(innerX, y + D(4), textW, nh);
 					// Als markierbares Textfeld, damit sich auch einzelne Teile kopieren lassen
 					if(!PlaceNotesBox(rn, notes)) TextRenderer.DrawText(g, notes, m_fBase, rn, m_p.Text, nf);
+					if(notesProt) DrawIconButton(g, re, new Btn(Glyph.EyeOff, L.T("Notizen verbergen"), ToggleReveal));
 					DrawIconButton(g, rb, new Btn(Glyph.Copy, L.T("Notizen kopieren"),
 						delegate { CopyField(pe, PwDefs.NotesField); }));
 					// „Kopiert“ liegt über der ersten Notizzeile – das Textfeld dort aussparen, sonst verdeckt es die Rückmeldung

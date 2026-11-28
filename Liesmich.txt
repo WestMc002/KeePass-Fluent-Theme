@@ -58,7 +58,8 @@ Funktionen
     (Klick auf eine Gruppe hebt den Filter wieder auf)
   - Passwortstärke als Balken
   - weitere Felder (z. B. "URL 2"), Links sind anklickbar
-  - Notizen mit Kopieren-Knopf, lange Notizen lassen sich aufklappen
+  - Notizen mit Kopieren-Knopf, lange Notizen lassen sich aufklappen;
+    geschützte Notizen bleiben verdeckt, bis man sie anzeigt
   - Text markieren und einzeln kopieren (Strg+C oder Rechtsklick):
     im Titel, in den Notizen, beim Benutzernamen und in den weiteren Feldern
     (nicht bei Passwörtern und geschützten Feldern)

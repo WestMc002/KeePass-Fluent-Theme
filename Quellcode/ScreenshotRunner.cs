@@ -199,6 +199,9 @@ namespace FluentTheme
 				m_area = Rectangle.FromLTRB(wr.Left, wr.Top, wr.Right, wr.Bottom);
 				m_area.Inflate(D(40), D(40));
 				m_area.Intersect(Screen.FromHandle(h).Bounds);
+				// Maus vor jeder Aufnahme aus dem Bereich: sonst ist z. B. das X des Fensters
+				// hervorgehoben (Hover), wenn die Maus zufällig darüber stand
+				MouseAwayFrom(m_area, Screen.FromHandle(h));
 				if(m_backdrop == null) m_backdrop = new Backdrop();
 				m_backdrop.BackColor = Color.Black;
 				m_backdrop.Bounds = m_area;
@@ -391,6 +394,20 @@ namespace FluentTheme
 			Main.SelectEntries(l, true, true);
 			if(m_ext.ShotList != null) m_ext.ShotList.Focus();
 			Main.UpdateUI(false, null, false, null, false, null, false);
+		}
+
+		/// <summary>Maus in eine Ecke des Bildschirms setzen, die nicht im Aufnahmebereich liegt.</summary>
+		private static void MouseAwayFrom(Rectangle area, Screen scr)
+		{
+			Rectangle b = scr.Bounds;
+			Point[] corners = new Point[] {
+				new Point(b.Right - 2, b.Bottom - 2), new Point(b.Left + 1, b.Bottom - 2),
+				new Point(b.Right - 2, b.Top + 1), new Point(b.Left + 1, b.Top + 1) };
+			foreach(Point pt in corners)
+			{
+				if(!area.Contains(pt)) { Cursor.Position = pt; return; }
+			}
+			Cursor.Position = corners[0];
 		}
 
 		private void MouseAway()

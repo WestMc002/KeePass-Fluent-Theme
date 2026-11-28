@@ -105,6 +105,8 @@ namespace FluentTheme
 			{ "Versionen", "Versions" },
 			{ "Ältere Versionen im Verlauf", "Older versions in the history" },
 			{ "UUID kopieren", "Copy UUID" },
+			{ "Notizen anzeigen", "Show notes" },
+			{ "Notizen verbergen", "Hide notes" },
 			{ "Notizen der Gruppe „{0}“", "Notes of group \u201C{0}\u201D" },
 			{ "Angezeigtes Passwort wieder verbergen", "Hide revealed password again" },
 			{ "Nie", "Never" },

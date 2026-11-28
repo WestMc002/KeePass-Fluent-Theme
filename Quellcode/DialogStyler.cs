@@ -417,6 +417,14 @@ namespace FluentTheme
 					ComboBox cb = (ComboBox)c;
 					cb.BackColor = p.Card;
 					cb.ForeColor = p.Text;
+					if(m_bgGuard.Add(c))
+					{
+						// KeePass setzt die Farbe zurück (z. B. Name im Dialog „Feld bearbeiten“ bei jeder
+						// Eingabe: ResetBackColor bzw. Rot bei ungültigem Namen) – sonst weißes Feld (Issue #9)
+						Control gc = c;
+						c.BackColorChanged += delegate { GuardFieldBg(gc); };
+						c.Disposed += delegate { m_bgGuard.Remove(gc); };
+					}
 					if(p.Dark) cb.FlatStyle = FlatStyle.Flat;
 					ThemeNative(c, "DarkMode_CFD", "Explorer");
 				}
@@ -911,7 +919,8 @@ namespace FluentTheme
 		{
 			Palette p = m_p;
 			if((p == null) || c.IsDisposed) return;
-			Color want = FieldBg(p);
+			// Auswahllisten haben die Kartenfarbe, Eingabefelder die etwas abgesetzte Feldfarbe
+			Color want = ((c is ComboBox) ? p.Card : FieldBg(p));
 			Color cur = c.BackColor;
 			if(cur.ToArgb() == want.ToArgb()) return;
 			Color target;

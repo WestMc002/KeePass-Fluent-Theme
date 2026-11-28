@@ -58,7 +58,8 @@ Features
     (clicking a group removes the filter again)
   - password strength as a bar
   - other fields (e.g. "URL 2"), links are clickable
-  - notes with copy button, long notes can be expanded
+  - notes with copy button, long notes can be expanded; protected notes
+    stay hidden until you show them
   - select text and copy parts of it (Ctrl+C or right-click): in the
     title, the notes, the user name and the other fields (not for passwords and
     protected fields)
